@@ -14,11 +14,17 @@
 #include <pulsecore/dbus-util.h>
 #endif
 
-#define GET_STREAM_NEW_PROPLIST(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->proplist : ((pa_source_output_new_data*)stream)->proplist)
+typedef enum _focus_acquired_status {
+    STREAM_FOCUS_ACQUIRED_NONE     = 0x00,
+    STREAM_FOCUS_ACQUIRED_PLAYBACK = 0x01,
+    STREAM_FOCUS_ACQUIRED_CAPTURE  = 0x02,
+} focus_acquired_status_t;
 
-#define GET_STREAM_PROPLIST(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input*)stream)->proplist : ((pa_source_output*)stream)->proplist)
+enum stream_direction {
+    STREAM_DIRECTION_IN,
+    STREAM_DIRECTION_OUT,
+    STREAM_DIRECTION_MAX,
+};
 
 #define GET_STREAM_NEW_SAMPLE_SPEC(stream, type) \
       (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->sample_spec : ((pa_source_output_new_data*)stream)->sample_spec)
@@ -29,11 +35,6 @@
 #define IS_FOCUS_ACQUIRED(focus, type) \
       (type == STREAM_SINK_INPUT? (focus & STREAM_FOCUS_ACQUIRED_PLAYBACK) : (focus & STREAM_FOCUS_ACQUIRED_CAPTURE))
 
-enum stream_direction {
-    STREAM_DIRECTION_IN,
-    STREAM_DIRECTION_OUT,
-    STREAM_DIRECTION_MAX,
-};
 
 typedef struct _stream_info {
     int32_t priority;
@@ -47,9 +48,9 @@ typedef struct _stream_info {
 typedef struct _volume_info {
     pa_bool_t is_hal_volume_type;
     struct _values {
-    pa_bool_t is_muted;
+        pa_bool_t is_muted;
         uint32_t current_level;
-    pa_idxset *idx_volume_values;
+        pa_idxset *idx_volume_values;
     } values[STREAM_DIRECTION_MAX];
 } volume_info;
 
@@ -91,6 +92,7 @@ struct _stream_manager {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
         pa_hook_slot *comm_hook_device_information_changed_slot;
+        pa_hook_slot *comm_hook_need_update_route_slot;
     } comm;
 };
 

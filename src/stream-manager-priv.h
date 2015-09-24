@@ -47,9 +47,9 @@ typedef struct _stream_info {
 typedef struct _volume_info {
     pa_bool_t is_hal_volume_type;
     struct _values {
-    pa_bool_t is_muted;
+        pa_bool_t is_muted;
         uint32_t current_level;
-    pa_idxset *idx_volume_values;
+        pa_idxset *idx_volume_values;
     } values[STREAM_DIRECTION_MAX];
 } volume_info;
 

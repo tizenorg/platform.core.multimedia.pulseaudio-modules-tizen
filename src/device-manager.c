@@ -343,8 +343,8 @@ struct device_file_map {
 
 struct pa_device_manager {
     pa_core *core;
-    pa_hook_slot *sink_put_hook_slot, *sink_unlink_hook_slot;
-    pa_hook_slot *source_put_hook_slot, *source_unlink_hook_slot;
+    pa_hook_slot *sink_put_hook_slot, *sink_state_changed_slot, *sink_unlink_hook_slot;
+    pa_hook_slot *source_put_hook_slot, *source_state_changed_slot, *source_unlink_hook_slot;
     pa_communicator *comm;
 
     /*
@@ -1930,6 +1930,11 @@ static dm_device* handle_not_predefined_device(pa_device_manager *dm, void *puls
 
     pa_log_debug("handle_not_predefined_device");
 
+    if (pdt == PA_DEVICE_TYPE_SINK)
+       ((pa_sink*)pulse_device)->use_internal_codec = FALSE;
+    else
+       ((pa_source*)pulse_device)->use_internal_codec = FALSE;
+
     if (pulse_device_get_device_type(pulse_device, pdt, device_class, &device_type, &device_profile, &device_name) < 0) {
         pa_log_warn("Cannot get device type of this device");
         return NULL;
@@ -2252,6 +2257,11 @@ static void handle_predefined_device_loaded(void *pulse_device, pa_device_type_t
 
     pa_log_debug("Predefined device loaded, Type:%s, Class:%d, device_string:%s, role:%s", pdt == PA_DEVICE_TYPE_SINK ? "sink" : "source", device_class, device_string, role);
 
+    if (pdt == PA_DEVICE_TYPE_SINK)
+       ((pa_sink*)pulse_device)->use_internal_codec = TRUE;
+    else
+       ((pa_source*)pulse_device)->use_internal_codec = TRUE;
+
     identifier = pulse_device_get_identifier(pulse_device, pdt, device_class);
     PA_IDXSET_FOREACH(type_info, dm->type_infos, type_idx) {
         /* foreach matching types (which has device_string-role) */
@@ -2494,6 +2504,60 @@ static pa_hook_result_t sink_unlink_hook_callback(pa_core *c, pa_sink *sink, pa_
     return PA_HOOK_OK;
 }
 
+static pa_hook_result_t device_state_changed_hook_cb(pa_core *c, pa_object *o, pa_device_manager *dm) {
+    dm_device *device_item;
+    dm_device *_device_item;
+    pa_bool_t use_internal_codec = FALSE;
+    uint32_t idx = 0;
+
+    pa_assert(c);
+    pa_object_assert_ref(o);
+    pa_assert(dm);
+
+    if (pa_sink_isinstance(o)) {
+        pa_sink *s = PA_SINK(o);
+        pa_sink_state_t state = pa_sink_get_state(s);
+        pa_log_debug("=========== Sink(%p,%s) state has been changed to [%d](0:RUNNING, 1:IDLE, 2:SUSPEND) ==========", s, s->name, state);
+        if (s->use_internal_codec) {
+            if (state == PA_SINK_SUSPENDED) {
+                PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
+                    pa_device_manager_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_OUT, DEVICE_ROLE_NORMAL, &use_internal_codec);
+                    if (use_internal_codec)
+                        pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_DEACTIVATED);
+                }
+            }
+        } else {
+            if ((device_item = pa_device_manager_get_device_with_sink(s))) {
+                if (state == PA_SINK_RUNNING)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_ACTIVATED);
+                else if (state == PA_SINK_SUSPENDED)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_DEACTIVATED);
+            }
+        }
+    } else if (pa_source_isinstance(o)) {
+        pa_source *s = PA_SOURCE(o);
+        pa_source_state_t state = pa_source_get_state(s);
+        pa_log_debug("=========== Source(%p,%s) state has been changed to [%d](0:RUNNING, 1:IDLE, 2:SUSPEND) ==========", s, s->name, state);
+        if (s->use_internal_codec) {
+            if (state == PA_SOURCE_SUSPENDED) {
+                PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
+                    pa_device_manager_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_IN, DEVICE_ROLE_NORMAL, &use_internal_codec);
+                    if (use_internal_codec)
+                        pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_DEACTIVATED);
+                }
+            }
+        } else {
+            if ((device_item = pa_device_manager_get_device_with_source(s))) {
+                if (state == PA_SOURCE_RUNNING)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_ACTIVATED);
+                else if (state == PA_SOURCE_SUSPENDED)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_DEACTIVATED);
+            }
+        }
+    }
+
+    return PA_HOOK_OK;
+}
 
 static pa_hook_result_t source_put_hook_callback(pa_core *c, pa_source *source, pa_device_manager *dm) {
     const char *device_string = NULL, *role = NULL, *device_string_removed_params = NULL;
@@ -4057,6 +4121,30 @@ dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_i
     return profile_item->direction;
 }
 
+void pa_device_manager_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role, pa_bool_t *use_internal_codec) {
+    pa_sink *sink;
+    pa_source *source;
+
+    pa_assert(device_item);
+    pa_assert(use_internal_codec);
+    pa_assert(role);
+
+    if (direction == DM_DEVICE_DIRECTION_IN) {
+        if ((source = pa_device_manager_get_source(device_item, role)))
+            *use_internal_codec = source->use_internal_codec;
+        else
+            *use_internal_codec = FALSE;
+    } else if (direction == DM_DEVICE_DIRECTION_OUT) {
+        if ((sink = pa_device_manager_get_sink(device_item, role)))
+            *use_internal_codec = sink->use_internal_codec;
+        else
+            *use_internal_codec = FALSE;
+    } else
+        *use_internal_codec = FALSE;
+
+    return;
+}
+
 int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     struct device_status_info *status_info;
 
@@ -4250,8 +4338,10 @@ pa_device_manager* pa_device_manager_init(pa_core *c) {
     dbus_init(dm);
 
     dm->sink_put_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_PUT], PA_HOOK_LATE+10, (pa_hook_cb_t) sink_put_hook_callback, dm);
+    dm->sink_state_changed_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_STATE_CHANGED], PA_HOOK_NORMAL, (pa_hook_cb_t) device_state_changed_hook_cb, dm);
     dm->sink_unlink_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_UNLINK], PA_HOOK_EARLY, (pa_hook_cb_t) sink_unlink_hook_callback, dm);
     dm->source_put_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_PUT], PA_HOOK_LATE+10, (pa_hook_cb_t) source_put_hook_callback, dm);
+    dm->source_state_changed_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_STATE_CHANGED], PA_HOOK_NORMAL, (pa_hook_cb_t) device_state_changed_hook_cb, dm);
     dm->source_unlink_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_UNLINK], PA_HOOK_EARLY, (pa_hook_cb_t) source_unlink_hook_callback, dm);
 
     dm->comm = pa_communicator_get(dm->core);
@@ -4302,10 +4392,14 @@ void pa_device_manager_done(pa_device_manager *dm) {
 
     if (dm->sink_put_hook_slot)
         pa_hook_slot_free(dm->sink_put_hook_slot);
+    if (dm->sink_state_changed_slot)
+        pa_hook_slot_free(dm->sink_state_changed_slot);
     if (dm->sink_unlink_hook_slot)
         pa_hook_slot_free(dm->sink_unlink_hook_slot);
     if (dm->source_put_hook_slot)
         pa_hook_slot_free(dm->source_put_hook_slot);
+    if (dm->source_state_changed_slot)
+        pa_hook_slot_free(dm->source_state_changed_slot);
     if (dm->source_unlink_hook_slot)
         pa_hook_slot_free(dm->source_unlink_hook_slot);
 

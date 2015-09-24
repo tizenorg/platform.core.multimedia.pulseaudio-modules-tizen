@@ -343,8 +343,8 @@ struct device_file_map {
 
 struct pa_device_manager {
     pa_core *core;
-    pa_hook_slot *sink_put_hook_slot, *sink_unlink_hook_slot;
-    pa_hook_slot *source_put_hook_slot, *source_unlink_hook_slot;
+    pa_hook_slot *sink_put_hook_slot, *sink_state_changed_slot, *sink_unlink_hook_slot;
+    pa_hook_slot *source_put_hook_slot, *source_state_changed_slot, *source_unlink_hook_slot;
     pa_communicator *comm;
 
     /*
@@ -1426,10 +1426,44 @@ static int _device_list_remove_device(pa_idxset *device_list, dm_device *device_
     return 0;
 }
 
+static pa_sink* _device_profile_get_sink(dm_device_profile *profile_item, const char *role) {
+    pa_sink *sink;
 
+    if (!profile_item || !role || !device_role_is_valid(role)) {
+        pa_log_error("Invalid Parameter");
+        return NULL;
+    }
+
+    if (!profile_item->playback_devices) {
+        pa_log_error("No playback devices");
+        return NULL;
+    }
+
+    sink = pa_hashmap_get(profile_item->playback_devices, role);
+    return sink;
+}
+
+static pa_source* _device_profile_get_source(dm_device_profile *profile_item, const char *role) {
+    pa_source *source;
+
+    if (!profile_item || !role || !device_role_is_valid(role)) {
+        pa_log_error("Invalid Parameter");
+        return NULL;
+    }
+
+    if (!profile_item->capture_devices) {
+        pa_log_error("No capture devices");
+        return NULL;
+    }
+
+    source = pa_hashmap_get(profile_item->capture_devices, role);
+    return source;
+}
 
 static dm_device* create_device_item(const char *device_type, const char *name, dm_device_profile *profile_item, pa_device_manager *dm) {
     dm_device *device_item = NULL;
+    pa_sink *sink = NULL;
+    pa_source *source = NULL;
 
     pa_assert(device_type);
     pa_assert(profile_item);
@@ -1451,6 +1485,13 @@ static dm_device* create_device_item(const char *device_type, const char *name, 
 
     _device_item_add_profile(device_item, profile_item, NULL, dm);
     _device_list_add_device(dm->device_list, device_item, dm);
+
+    // just for external device
+    if ((sink = _device_profile_get_sink(profile_item, DEVICE_ROLE_NORMAL)))
+        sink->device_item = device_item;
+    if ((source = _device_profile_get_source(profile_item, DEVICE_ROLE_NORMAL)))
+        source->device_item = device_item;
+
     notify_device_connection_changed(device_item, TRUE, dm);
 
     return device_item;
@@ -1462,8 +1503,6 @@ static void destroy_device_item(dm_device *device_item, pa_device_manager *dm) {
     }
 
     pa_log_debug("Destroy device item which of type is %s", device_item->type);
-
-    _device_list_remove_device(dm->device_list, device_item, dm);
 
     device_item_free_func(device_item);
 }
@@ -2291,6 +2330,7 @@ static void handle_sink_unloaded(pa_sink *sink, pa_device_manager *dm) {
                         if (profile_playback_size == 1 && profile_capture_size == 0) {
                             if (item_size == 1) {
                                 pa_log_debug("notify device disconnected");
+                                _device_list_remove_device(dm->device_list, device_item, dm);
                                 notify_device_connection_changed(device_item, FALSE, dm);
                             }
                         }
@@ -2353,6 +2393,7 @@ static void handle_source_unloaded(pa_source *source, pa_device_manager *dm) {
                         if (profile_capture_size == 1 && profile_playback_size == 0) {
                             if (item_size == 1) {
                                 pa_log_debug("notify device disconnected");
+                                _device_list_remove_device(dm->device_list, device_item, dm);
                                 notify_device_connection_changed(device_item, FALSE, dm);
                             }
                         }
@@ -2453,6 +2494,58 @@ static pa_hook_result_t sink_unlink_hook_callback(pa_core *c, pa_sink *sink, pa_
     return PA_HOOK_OK;
 }
 
+static pa_hook_result_t device_state_changed_hook_cb(pa_core *c, pa_object *o, pa_device_manager *dm) {
+    dm_device *device_item;
+    dm_device *_device_item;
+    pa_bool_t use_internal_codec = FALSE;
+    uint32_t idx = 0;
+
+    pa_assert(c);
+    pa_object_assert_ref(o);
+    pa_assert(dm);
+
+    if (pa_sink_isinstance(o)) {
+        pa_sink *s = PA_SINK(o);
+        pa_sink_state_t state = pa_sink_get_state(s);
+        pa_log_debug("=========== Sink(%p,%s) state has been changed to [%d](0:RUNNING, 1:IDLE, 2:SUSPEND) ==========", s, s->name, state);
+        if ((device_item = pa_device_manager_get_device_with_sink(s))) {
+            pa_device_manager_use_internal_codec(device_item, &use_internal_codec);
+            if (!use_internal_codec) {
+                if (state == PA_SINK_RUNNING)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_ACTIVATED);
+                else if (state == PA_SINK_SUSPENDED)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_DEACTIVATED);
+            } else if (state == PA_SINK_SUSPENDED) {
+                PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
+                    pa_device_manager_use_internal_codec(_device_item, &use_internal_codec);
+                    if (use_internal_codec)
+                        pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_DEACTIVATED);
+                }
+            }
+        }
+    } else if (pa_source_isinstance(o)) {
+        pa_source *s = PA_SOURCE(o);
+        pa_source_state_t state = pa_source_get_state(s);
+        pa_log_debug("=========== Source(%p,%s) state has been changed to [%d](0:RUNNING, 1:IDLE, 2:SUSPEND) ==========", s, s->name, state);
+        if ((device_item = pa_device_manager_get_device_with_source(s))) {
+            pa_device_manager_use_internal_codec(device_item, &use_internal_codec);
+            if (!use_internal_codec) {
+                if (state == PA_SOURCE_RUNNING)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_ACTIVATED);
+                else if (state == PA_SOURCE_SUSPENDED)
+                    pa_device_manager_set_device_state(device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_DEACTIVATED);
+            } else if (state == PA_SOURCE_SUSPENDED) {
+                PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
+                    pa_device_manager_use_internal_codec(_device_item, &use_internal_codec);
+                    if (use_internal_codec)
+                        pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_DEACTIVATED);
+                }
+            }
+        }
+    }
+
+    return PA_HOOK_OK;
+}
 
 static pa_hook_result_t source_put_hook_callback(pa_core *c, pa_source *source, pa_device_manager *dm) {
     const char *device_string = NULL, *role = NULL, *device_string_removed_params = NULL;
@@ -3048,8 +3141,10 @@ static int handle_device_disconnected(pa_device_manager *dm, const char *device_
     PA_IDXSET_FOREACH(device_item, dm->device_list, device_idx) {
         if (pa_streq(device_item->type, device_type)) {
             if((profile_item = _device_item_get_profile(device_item, device_profile))) {
-                if (_device_item_get_size(device_item) == 1)
+                if (_device_item_get_size(device_item) == 1) {
+                    _device_list_remove_device(dm->device_list, device_item, dm);
                     notify_device_connection_changed(device_item, FALSE, dm);
+                }
                 destroy_device_profile(profile_item, dm);
             } else {
                 pa_log_debug("no matching profile");
@@ -4014,6 +4109,24 @@ dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_i
     return profile_item->direction;
 }
 
+#define PREFIX_FOR_INTERNAL_DEV             "builtin-"
+void pa_device_manager_use_internal_codec(dm_device *device_item, pa_bool_t *use_internal_codec) {
+    dm_device_profile *profile_item;
+
+    pa_assert(device_item);
+    pa_assert(use_internal_codec);
+    pa_assert(profile_item = _device_item_get_active_profile(device_item));
+
+    if (device_item->type && ((!strncmp(PREFIX_FOR_INTERNAL_DEV, device_item->type, strlen(PREFIX_FOR_INTERNAL_DEV))) || pa_streq("audio-jack", device_item->type)))
+        *use_internal_codec = TRUE;
+    else if (profile_item->profile && pa_streq("sco", profile_item->profile))
+        *use_internal_codec = TRUE;
+    else
+        *use_internal_codec = FALSE;
+
+    return;
+}
+
 int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     struct device_status_info *status_info;
 
@@ -4207,8 +4320,10 @@ pa_device_manager* pa_device_manager_init(pa_core *c) {
     dbus_init(dm);
 
     dm->sink_put_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_PUT], PA_HOOK_LATE+10, (pa_hook_cb_t) sink_put_hook_callback, dm);
+    dm->sink_state_changed_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_STATE_CHANGED], PA_HOOK_NORMAL, (pa_hook_cb_t) device_state_changed_hook_cb, dm);
     dm->sink_unlink_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SINK_UNLINK], PA_HOOK_EARLY, (pa_hook_cb_t) sink_unlink_hook_callback, dm);
     dm->source_put_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_PUT], PA_HOOK_LATE+10, (pa_hook_cb_t) source_put_hook_callback, dm);
+    dm->source_state_changed_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_STATE_CHANGED], PA_HOOK_NORMAL, (pa_hook_cb_t) device_state_changed_hook_cb, dm);
     dm->source_unlink_hook_slot = pa_hook_connect(&dm->core->hooks[PA_CORE_HOOK_SOURCE_UNLINK], PA_HOOK_EARLY, (pa_hook_cb_t) source_unlink_hook_callback, dm);
 
     dm->comm = pa_communicator_get(dm->core);
@@ -4259,10 +4374,14 @@ void pa_device_manager_done(pa_device_manager *dm) {
 
     if (dm->sink_put_hook_slot)
         pa_hook_slot_free(dm->sink_put_hook_slot);
+    if (dm->sink_state_changed_slot)
+        pa_hook_slot_free(dm->sink_state_changed_slot);
     if (dm->sink_unlink_hook_slot)
         pa_hook_slot_free(dm->sink_unlink_hook_slot);
     if (dm->source_put_hook_slot)
         pa_hook_slot_free(dm->source_put_hook_slot);
+    if (dm->source_state_changed_slot)
+        pa_hook_slot_free(dm->source_state_changed_slot);
     if (dm->source_unlink_hook_slot)
         pa_hook_slot_free(dm->source_unlink_hook_slot);
 

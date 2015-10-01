@@ -1426,10 +1426,44 @@ static int _device_list_remove_device(pa_idxset *device_list, dm_device *device_
     return 0;
 }
 
+static pa_sink* _device_profile_get_sink(dm_device_profile *profile_item, const char *role) {
+    pa_sink *sink;
 
+    if (!profile_item || !role || !device_role_is_valid(role)) {
+        pa_log_error("Invalid Parameter");
+        return NULL;
+    }
+
+    if (!profile_item->playback_devices) {
+        pa_log_error("No playback devices");
+        return NULL;
+    }
+
+    sink = pa_hashmap_get(profile_item->playback_devices, role);
+    return sink;
+}
+
+static pa_source* _device_profile_get_source(dm_device_profile *profile_item, const char *role) {
+    pa_source *source;
+
+    if (!profile_item || !role || !device_role_is_valid(role)) {
+        pa_log_error("Invalid Parameter");
+        return NULL;
+    }
+
+    if (!profile_item->capture_devices) {
+        pa_log_error("No capture devices");
+        return NULL;
+    }
+
+    source = pa_hashmap_get(profile_item->capture_devices, role);
+    return source;
+}
 
 static dm_device* create_device_item(const char *device_type, const char *name, dm_device_profile *profile_item, pa_device_manager *dm) {
     dm_device *device_item = NULL;
+    pa_sink *sink = NULL;
+    pa_source *source = NULL;
 
     pa_assert(device_type);
     pa_assert(profile_item);
@@ -1451,6 +1485,13 @@ static dm_device* create_device_item(const char *device_type, const char *name, 
 
     _device_item_add_profile(device_item, profile_item, NULL, dm);
     _device_list_add_device(dm->device_list, device_item, dm);
+
+    // just for external device
+    if ((sink = _device_profile_get_sink(profile_item, DEVICE_ROLE_NORMAL)))
+        sink->device_item = device_item;
+    if ((source = _device_profile_get_source(profile_item, DEVICE_ROLE_NORMAL)))
+        source->device_item = device_item;
+
     notify_device_connection_changed(device_item, TRUE, dm);
 
     return device_item;

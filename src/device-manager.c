@@ -1504,8 +1504,6 @@ static void destroy_device_item(dm_device *device_item, pa_device_manager *dm) {
 
     pa_log_debug("Destroy device item which of type is %s", device_item->type);
 
-    _device_list_remove_device(dm->device_list, device_item, dm);
-
     device_item_free_func(device_item);
 }
 
@@ -2332,6 +2330,7 @@ static void handle_sink_unloaded(pa_sink *sink, pa_device_manager *dm) {
                         if (profile_playback_size == 1 && profile_capture_size == 0) {
                             if (item_size == 1) {
                                 pa_log_debug("notify device disconnected");
+                                _device_list_remove_device(dm->device_list, device_item, dm);
                                 notify_device_connection_changed(device_item, FALSE, dm);
                             }
                         }
@@ -2394,6 +2393,7 @@ static void handle_source_unloaded(pa_source *source, pa_device_manager *dm) {
                         if (profile_capture_size == 1 && profile_playback_size == 0) {
                             if (item_size == 1) {
                                 pa_log_debug("notify device disconnected");
+                                _device_list_remove_device(dm->device_list, device_item, dm);
                                 notify_device_connection_changed(device_item, FALSE, dm);
                             }
                         }
@@ -3089,8 +3089,10 @@ static int handle_device_disconnected(pa_device_manager *dm, const char *device_
     PA_IDXSET_FOREACH(device_item, dm->device_list, device_idx) {
         if (pa_streq(device_item->type, device_type)) {
             if((profile_item = _device_item_get_profile(device_item, device_profile))) {
-                if (_device_item_get_size(device_item) == 1)
+                if (_device_item_get_size(device_item) == 1) {
+                    _device_list_remove_device(dm->device_list, device_item, dm);
                     notify_device_connection_changed(device_item, FALSE, dm);
+                }
                 destroy_device_profile(profile_item, dm);
             } else {
                 pa_log_debug("no matching profile");

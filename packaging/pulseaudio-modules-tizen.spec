@@ -4,7 +4,7 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Improved Linux sound server
 Version:          5.0
-Release:          42
+Release:          43
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
 URL:              http://pulseaudio.org

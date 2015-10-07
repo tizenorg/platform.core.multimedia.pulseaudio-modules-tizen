@@ -363,6 +363,7 @@ struct pa_device_manager {
     */
     pa_idxset *device_status;
     pa_dbus_connection *dbus_conn;
+    dm_device_sco_status_t bt_sco_status;
 };
 
 /***************** structures for static information get from json *********/
@@ -3191,8 +3192,10 @@ static int handle_device_status_changed(pa_device_manager *dm, const char *devic
         }
     } else if (pa_streq(device_type, DEVICE_TYPE_BT) && device_profile && pa_streq(device_profile, DEVICE_PROFILE_BT_SCO)) {
         if (detected_status == BT_SCO_DISCONNECTED) {
+            dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_DISCONNECTED;
             handle_device_disconnected(dm, device_type, device_profile, identifier);
         } else if (detected_status == BT_SCO_CONNECTED) {
+            dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_CONNECTED;
             handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_BT_SCO);
         } else {
             pa_log_warn("Got invalid bt-sco detected value");
@@ -3376,16 +3379,7 @@ static DBusHandlerResult dbus_filter_device_detect_handler(DBusConnection *c, DB
             dbus_bool_t value;
             char *name;
             dbus_message_iter_get_basic(&variant_iter, &value);
-            if (pa_streq(property_name, "Playing")) {
-                dm_device *device_item;
-                pa_log_debug("SCO Playing : %d", value);
-                if ((device_item = _device_manager_get_device(dm->device_list, DEVICE_TYPE_BT))) {
-                    if (value)
-                        _device_item_set_active_profile(device_item, DEVICE_PROFILE_BT_SCO);
-                    else
-                        _device_item_set_active_profile_auto(device_item);
-                }
-            } else if (pa_streq(property_name, "Connected")) {
+            if (pa_streq(property_name, "Connected")) {
                 pa_log_debug("HFP Connection : %d", value);
                 if (value) {
                     method_call_bt_get_name(c, dbus_message_get_path(s), &name);
@@ -4147,6 +4141,7 @@ void pa_device_manager_use_internal_codec(dm_device *device_item, dm_device_dire
 
 int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     struct device_status_info *status_info;
+    dm_device *bt_device;
 
     pa_assert(dm);
     pa_assert(dm->dbus_conn);
@@ -4157,6 +4152,11 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     }
     if (!status_info->detected) {
         pa_log_error("bt-sco not detected");
+        return -1;
+    }
+
+    if ((bt_device = _device_manager_get_device(dm->device_list, DEVICE_TYPE_BT)) == NULL) {
+        pa_log_error("no bt device");
         return -1;
     }
 
@@ -4168,11 +4168,26 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
 
     pa_log_debug("bt sco open end");
 
+    if (_device_item_set_active_profile(bt_device, DEVICE_PROFILE_BT_SCO) == NULL) {
+        pa_log_error("set bt sco as active profile failed");
+    }
+    dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_OPENED;
+
     return 0;
+}
+
+void pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_sco_status_t *status) {
+    pa_assert(dm);
+    pa_assert(status);
+
+    *status = dm->bt_sco_status;
+
+    return;
 }
 
 int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
     struct device_status_info *status_info;
+    dm_device *bt_device;
 
     pa_assert(dm);
     pa_assert(dm->dbus_conn);
@@ -4186,12 +4201,21 @@ int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
         return -1;
     }
 
+    if ((bt_device = _device_manager_get_device(dm->device_list, DEVICE_TYPE_BT)) == NULL) {
+        pa_log_error("no bt device");
+        return -1;
+    }
+
     pa_log_debug("bt sco close start");
     if (method_call_bt_sco(pa_dbus_connection_get(dm->dbus_conn), FALSE) < 0) {
         pa_log_error("Failed to bt sco close");
         return -1;
     }
     pa_log_debug("bt sco close end");
+    if (_device_item_set_active_profile_auto(bt_device) == NULL) {
+        pa_log_error("set active profile auto failed");
+    }
+    dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_CONNECTED;
 
     return 0;
 }
@@ -4334,6 +4358,7 @@ pa_device_manager* pa_device_manager_init(pa_core *c) {
 
     dm = pa_xnew0(pa_device_manager, 1);
     dm->core = c;
+    dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_DISCONNECTED;
 
     dbus_init(dm);
 

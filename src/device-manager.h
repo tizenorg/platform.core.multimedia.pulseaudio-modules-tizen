@@ -38,6 +38,12 @@ typedef enum dm_device_state_type {
     DM_DEVICE_STATE_ACTIVATED
 } dm_device_state_t;
 
+typedef enum dm_device_bt_sco_status_type {
+    DM_DEVICE_BT_SCO_STATUS_DISCONNECTED = 0,
+    DM_DEVICE_BT_SCO_STATUS_CONNECTED,
+    DM_DEVICE_BT_SCO_STATUS_OPENED
+} dm_device_sco_status_t;
+
 typedef struct pa_device_manager pa_device_manager;
 typedef struct dm_device dm_device;
 
@@ -74,5 +80,6 @@ int pa_device_manager_load_sink(const char *device_type, const char *device_prof
 int pa_device_manager_load_source(const char *device_type, const char *device_profile, const char *role, pa_device_manager *dm);
 
 int pa_device_manager_bt_sco_open(pa_device_manager *dm);
+int pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_sco_status_t *status);
 int pa_device_manager_bt_sco_close(pa_device_manager *dm);
 int pa_device_manager_bt_sco_get_property(pa_device_manager *dm, pa_bool_t *is_wide_band, pa_bool_t *nrec);

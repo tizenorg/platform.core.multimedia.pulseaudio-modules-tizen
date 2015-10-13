@@ -56,9 +56,12 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
         h->intf.alsa_pcm_open = dlsym(h->dl_handle, "audio_alsa_pcm_open");
         h->intf.alsa_pcm_close = dlsym(h->dl_handle, "audio_alsa_pcm_close");
         h->intf.pcm_open = dlsym(h->dl_handle, "audio_pcm_open");
+        h->intf.pcm_start = dlsym(h->dl_handle, "audio_pcm_start");
+        h->intf.pcm_stop = dlsym(h->dl_handle, "audio_pcm_stop");
         h->intf.pcm_close = dlsym(h->dl_handle, "audio_pcm_close");
         h->intf.pcm_avail = dlsym(h->dl_handle, "audio_pcm_avail");
         h->intf.pcm_write = dlsym(h->dl_handle, "audio_pcm_write");
+        h->intf.pcm_read = dlsym(h->dl_handle, "audio_pcm_read");
         h->intf.do_route = dlsym(h->dl_handle, "audio_do_route");
         h->intf.update_route_option = dlsym(h->dl_handle, "audio_update_route_option");
         h->intf.update_stream_connection_info  = dlsym(h->dl_handle, "audio_update_stream_connection_info");

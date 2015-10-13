@@ -1698,7 +1698,7 @@ static dm_device_profile* _device_profile_remove_source(dm_device_profile *profi
     return profile_item;
 }
 
-void _device_profile_set_state(dm_device_profile *profile_item,  dm_device_direction_t direction, dm_device_state_t state) {
+static void _device_profile_set_state(dm_device_profile *profile_item,  dm_device_direction_t direction, dm_device_state_t state) {
     dm_device_state_t prev_state, new_state;
     pa_assert(profile_item);
 
@@ -1715,7 +1715,6 @@ void _device_profile_set_state(dm_device_profile *profile_item,  dm_device_direc
         notify_device_info_changed(profile_item->device_item, DM_DEVICE_CHANGED_INFO_STATE, profile_item->device_item->dm);
     }
 }
-
 
 static int device_type_get_direction(pa_device_manager *dm, const char *device_type, const char *device_profile, const char *identifier) {
     struct device_type_info *type_info = NULL;
@@ -3781,7 +3780,7 @@ static void handle_get_bt_a2dp_status(DBusConnection *conn, DBusMessage *msg, vo
     dm_device *device_item;
     dm_device_profile *profile_item;
     dbus_bool_t is_bt_on = FALSE;
-    char *bt_name = "none";
+    const char *bt_name = "none";
 
     pa_assert(conn);
     pa_assert(msg);

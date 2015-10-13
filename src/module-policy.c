@@ -28,7 +28,6 @@
 #include <pulsecore/namereg.h>
 #include <pulsecore/sink-input.h>
 #include <pulsecore/source-output.h>
-#include <pulsecore/protocol-native.h>
 #include <pulsecore/pstream-util.h>
 #include <pulsecore/strbuf.h>
 #include <pulsecore/sink-input.h>
@@ -47,13 +46,6 @@
 #include "stream-manager.h"
 #include "stream-manager-volume.h"
 #include "device-manager.h"
-
-
-//To be changed
-#ifndef VCONFKEY_SOUND_CAPTURE_STATUS
-#define VCONFKEY_SOUND_CAPTURE_STATUS "memory/Sound/SoundCaptureStatus"
-#endif
-
 
 PA_MODULE_AUTHOR("Seungbae Shin");
 PA_MODULE_DESCRIPTION("Media Policy module");
@@ -235,16 +227,9 @@ enum signal_index {
 #define PA_DUMP_PLAYBACK_RESAMPLER_OUT          0x00000010
 #define PA_DUMP_CAPTURE_ENCODER_IN              0x80000000
 
-struct pa_hal_device_event_data {
-    audio_device_info_t device_info;
-    audio_device_param_info_t params[AUDIO_DEVICE_PARAM_MAX];
-};
-
 struct userdata {
     pa_core *core;
     pa_module *module;
-
-    pa_native_protocol *protocol;
 
 #ifdef HAVE_DBUS
     pa_dbus_connection *dbus_conn;
@@ -269,52 +254,7 @@ struct userdata {
     pa_module *module_null_source;
 };
 
-enum {
-    SUBCOMMAND_TEST,
-    SUBCOMMAND_GET_VOLUME_LEVEL,
-    SUBCOMMAND_SET_VOLUME_LEVEL,
-    SUBCOMMAND_GET_MUTE,
-    SUBCOMMAND_SET_MUTE,
-};
-
 static void _set_device_state(dm_device *device, stream_type_t stream_type, dm_device_state_t device_state);
-
-static int __convert_volume_type_to_string(uint32_t volume_type, const char **volume_type_str) {
-    int ret = 0;
-    switch (volume_type) {
-    case AUDIO_VOLUME_TYPE_SYSTEM:
-        *volume_type_str = "system";
-        break;
-    case AUDIO_VOLUME_TYPE_NOTIFICATION:
-        *volume_type_str = "notification";
-        break;
-    case AUDIO_VOLUME_TYPE_ALARM:
-        *volume_type_str = "alarm";
-        break;
-    case AUDIO_VOLUME_TYPE_RINGTONE:
-        *volume_type_str = "ringtone";
-        break;
-    case AUDIO_VOLUME_TYPE_MEDIA:
-        *volume_type_str = "media";
-        break;
-    case AUDIO_VOLUME_TYPE_CALL:
-        *volume_type_str = "call";
-        break;
-    case AUDIO_VOLUME_TYPE_VOIP:
-        *volume_type_str = "voip";
-        break;
-    case AUDIO_VOLUME_TYPE_VOICE:
-        *volume_type_str = "voice";
-        break;
-    case AUDIO_VOLUME_TYPE_FIXED:
-        *volume_type_str = "fixed";
-        break;
-    default:
-        ret = -1;
-    }
-    pa_log_debug("volume_type[%d] => [%s], ret[%d]", volume_type, *volume_type_str, ret);
-    return ret;
-}
 
 static void __load_dump_config(struct userdata *u)
 {
@@ -345,120 +285,6 @@ static void __load_dump_config(struct userdata *u)
     if (vconf_set_int(PA_DUMP_VCONF_KEY, vconf_dump)) {
         pa_log_warn("vconf_set_int %s=%x failed", PA_DUMP_VCONF_KEY, vconf_dump);
     }
-}
-
-#define EXT_VERSION 1
-
-static int extension_cb(pa_native_protocol *p, pa_module *m, pa_native_connection *c, uint32_t tag, pa_tagstruct *t) {
-    struct userdata *u = NULL;
-    uint32_t command;
-    pa_tagstruct *reply = NULL;
-
-    pa_assert(p);
-    pa_assert(m);
-    pa_assert(c);
-    pa_assert(t);
-
-    u = m->userdata;
-
-    if (pa_tagstruct_getu32(t, &command) < 0)
-        goto fail;
-
-    reply = pa_tagstruct_new(NULL, 0);
-    pa_tagstruct_putu32(reply, PA_COMMAND_REPLY);
-    pa_tagstruct_putu32(reply, tag);
-
-    switch (command) {
-        case SUBCOMMAND_TEST: {
-            if (!pa_tagstruct_eof(t))
-                goto fail;
-
-            pa_tagstruct_putu32(reply, EXT_VERSION);
-            break;
-        }
-        /* it will be removed soon */
-        case SUBCOMMAND_GET_VOLUME_LEVEL: {
-            uint32_t stream_idx = PA_INVALID_INDEX;
-            uint32_t volume_type = 0;
-            uint32_t volume_level = 0;
-            const char *volume_str = NULL;
-
-            pa_tagstruct_getu32(t, &stream_idx);
-            pa_tagstruct_getu32(t, &volume_type);
-
-            __convert_volume_type_to_string(volume_type, &volume_str);
-            pa_stream_manager_volume_get_level(u->stream_manager, STREAM_SINK_INPUT, volume_str, &volume_level);
-
-            pa_tagstruct_putu32(reply, volume_level);
-            break;
-        }
-        /* it will be removed soon */
-        case SUBCOMMAND_SET_VOLUME_LEVEL: {
-            uint32_t stream_idx = PA_INVALID_INDEX;
-            uint32_t volume_type = 0;
-            uint32_t volume_level = 0;
-            const char *volume_str = NULL;
-
-            pa_tagstruct_getu32(t, &stream_idx);
-            pa_tagstruct_getu32(t, &volume_type);
-            pa_tagstruct_getu32(t, &volume_level);
-
-            __convert_volume_type_to_string(volume_type, &volume_str);
-            pa_stream_manager_volume_set_level(u->stream_manager, STREAM_SINK_INPUT, volume_str, volume_level);
-            break;
-        }
-        /* it will be removed soon */
-        case SUBCOMMAND_GET_MUTE: {
-            uint32_t stream_idx = PA_INVALID_INDEX;
-            uint32_t volume_type = 0;
-            uint32_t direction = 0;
-            pa_bool_t mute = FALSE;
-            const char *volume_str = NULL;
-
-            pa_tagstruct_getu32(t, &stream_idx);
-            pa_tagstruct_getu32(t, &volume_type);
-            pa_tagstruct_getu32(t, &direction);
-
-            __convert_volume_type_to_string(volume_type, &volume_str);
-            pa_stream_manager_volume_get_mute(u->stream_manager, STREAM_SINK_INPUT, volume_str, &mute);
-
-            pa_tagstruct_putu32(reply, (uint32_t)mute);
-            break;
-        }
-        /* it will be removed soon */
-        case SUBCOMMAND_SET_MUTE: {
-            uint32_t stream_idx = PA_INVALID_INDEX;
-            uint32_t volume_type = 0;
-            uint32_t direction = 0;
-            uint32_t mute = 0;
-            const char *volume_str = NULL;
-
-            pa_tagstruct_getu32(t, &stream_idx);
-            pa_tagstruct_getu32(t, &volume_type);
-            pa_tagstruct_getu32(t, &direction);
-            pa_tagstruct_getu32(t, &mute);
-
-            __convert_volume_type_to_string(volume_type, &volume_str);
-            if ((int32_t)stream_idx == -1)
-                pa_stream_manager_volume_set_mute(u->stream_manager, STREAM_SINK_INPUT, volume_str, (pa_bool_t)mute);
-            else
-                pa_stream_manager_volume_set_mute_by_idx(u->stream_manager, STREAM_SINK_INPUT, stream_idx, (pa_bool_t)mute);
-            break;
-        }
-
-        default:
-            goto fail;
-    }
-
-    pa_pstream_send_tagstruct(pa_native_connection_get_pstream(c), reply);
-    return 0;
-
-    fail:
-
-    if (reply)
-        pa_tagstruct_free(reply);
-
-    return -1;
 }
 
 /* Set the proper sink(source) according to the data of the parameter.
@@ -1918,9 +1744,6 @@ int pa__init(pa_module *m)
     u->test_property1 = 123;
 #endif
 
-    u->protocol = pa_native_protocol_get(m->core);
-    pa_native_protocol_install_ext(u->protocol, m, extension_cb);
-
     u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
 
     u->communicator.comm = pa_communicator_get(u->core);
@@ -1991,11 +1814,6 @@ void pa__done(pa_module *m)
 #endif
     if (u->device_manager)
         pa_device_manager_done(u->device_manager);
-
-    if (u->protocol) {
-        pa_native_protocol_remove_ext(u->protocol, m);
-        pa_native_protocol_unref(u->protocol);
-    }
 
     if (u->stream_manager)
         pa_stream_manager_done(u->stream_manager);

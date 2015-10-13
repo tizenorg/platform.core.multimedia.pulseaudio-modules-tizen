@@ -33,21 +33,37 @@
 #define VOLUME_INI_TUNED_PATH       "/opt/system/mmfw_audio_volume.ini"
 #define DEFAULT_TABLE               "volumes"
 
+/* Stream */
+enum gain_type {
+    GAIN_TYPE_DEFAULT,
+    GAIN_TYPE_DIALER,
+    GAIN_TYPE_TOUCH,
+    GAIN_TYPE_AF,
+    GAIN_TYPE_SHUTTER1,
+    GAIN_TYPE_SHUTTER2,
+    GAIN_TYPE_CAMCODING,
+    GAIN_TYPE_MIDI,
+    GAIN_TYPE_BOOTING,
+    GAIN_TYPE_VIDEO,
+    GAIN_TYPE_TTS,
+    GAIN_TYPE_MAX,
+};
+
 /* TODO : after preparing gain map, we can remove it */
 static const char *__get_gain_type_string_by_idx (uint32_t gain_type_idx) {
     switch (gain_type_idx) {
-    case AUDIO_GAIN_TYPE_DEFAULT:           return "default";
-    case AUDIO_GAIN_TYPE_DIALER:            return "dialer";
-    case AUDIO_GAIN_TYPE_TOUCH:             return "touch";
-    case AUDIO_GAIN_TYPE_AF:                return "af";
-    case AUDIO_GAIN_TYPE_SHUTTER1:          return "shutter1";
-    case AUDIO_GAIN_TYPE_SHUTTER2:          return "shutter2";
-    case AUDIO_GAIN_TYPE_CAMCODING:         return "camcording";
-    case AUDIO_GAIN_TYPE_MIDI:              return "midi";
-    case AUDIO_GAIN_TYPE_BOOTING:           return "booting";
-    case AUDIO_GAIN_TYPE_VIDEO:             return "video";
-    case AUDIO_GAIN_TYPE_TTS:               return "tts";
-    default:                                return "invalid";
+    case GAIN_TYPE_DEFAULT:           return "default";
+    case GAIN_TYPE_DIALER:            return "dialer";
+    case GAIN_TYPE_TOUCH:             return "touch";
+    case GAIN_TYPE_AF:                return "af";
+    case GAIN_TYPE_SHUTTER1:          return "shutter1";
+    case GAIN_TYPE_SHUTTER2:          return "shutter2";
+    case GAIN_TYPE_CAMCODING:         return "camcording";
+    case GAIN_TYPE_MIDI:              return "midi";
+    case GAIN_TYPE_BOOTING:           return "booting";
+    case GAIN_TYPE_VIDEO:             return "video";
+    case GAIN_TYPE_TTS:               return "tts";
+    default:                          return "invalid";
     }
 }
 
@@ -113,7 +129,7 @@ static int load_out_volume_conf_file (pa_stream_manager *m) {
     }
 
     /* Load gain table */
-    for (gain_type_idx = AUDIO_GAIN_TYPE_DEFAULT + 1; gain_type_idx < AUDIO_GAIN_TYPE_MAX; gain_type_idx++) {
+    for (gain_type_idx = GAIN_TYPE_DEFAULT + 1; gain_type_idx < GAIN_TYPE_MAX; gain_type_idx++) {
         const char *gain_type_str = __get_gain_type_string_by_idx(gain_type_idx);
         size = strlen(table_str) + strlen("gain") + strlen(gain_type_str) + 3;
         key = pa_xmalloc0(size);

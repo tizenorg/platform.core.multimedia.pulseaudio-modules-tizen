@@ -24,10 +24,20 @@
 #endif
 
 #include "hal-manager.h"
+#include "tizen-audio.h"
 #include <pulsecore/shared.h>
 
 /* Audio HAL library */
 #define LIB_TIZEN_AUDIO "libtizen-audio.so"
+
+struct _pa_hal_manager {
+    PA_REFCNT_DECLARE;
+
+    pa_core *core;
+    void *dl_handle;
+    void *data;
+    audio_interface_t intf;
+};
 
 pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
     pa_hal_manager *h;
@@ -46,7 +56,6 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
     if (h->dl_handle) {
         h->intf.init = dlsym(h->dl_handle, "audio_init");
         h->intf.deinit = dlsym(h->dl_handle, "audio_deinit");
-        h->intf.reset_volume = dlsym(h->dl_handle, "audio_reset_volume");
         h->intf.get_volume_level_max = dlsym(h->dl_handle, "audio_get_volume_level_max");
         h->intf.get_volume_level = dlsym(h->dl_handle, "audio_get_volume_level");
         h->intf.set_volume_level = dlsym(h->dl_handle, "audio_set_volume_level");
@@ -69,10 +78,9 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
                 pa_log_error("hal_manager init failed");
             }
         }
-#if 1 /* remove comment after enable NEW_HAL */
+
         pa_shared_set(core, "tizen-audio-data", h->data);
         pa_shared_set(core, "tizen-audio-interface", &h->intf);
-#endif
 
      } else {
          pa_log_error("open hal_manager failed :%s", dlerror());
@@ -133,19 +141,6 @@ int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, io_direction_t di
     } else
         pa_log_info("maxlength:%d, tlength:%d, prebuf:%d, minreq:%d, fragsize:%d", *maxlength, *tlength, *prebuf, *minreq, *fragsize);
 
-    return ret;
-}
-
-int32_t pa_hal_manager_reset_volume (pa_hal_manager *h) {
-    int32_t ret = 0;
-    audio_return_t hal_ret = AUDIO_RET_OK;
-
-    pa_assert(h);
-
-    if (AUDIO_IS_ERROR(hal_ret = h->intf.reset_volume(h->data))) {
-        pa_log_error("reset volume returns error:0x%x", hal_ret);
-        ret = -1;
-    }
     return ret;
 }
 

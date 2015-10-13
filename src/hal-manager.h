@@ -3,17 +3,6 @@
 #include <dlfcn.h>
 #include <pulsecore/core.h>
 
-#include "tizen-audio.h"
-/* TODO : move below structure to hal-manager.c */
-struct _pa_hal_manager {
-    PA_REFCNT_DECLARE;
-
-    pa_core *core;
-    void *dl_handle;
-    void *data;
-    audio_interface_t intf;
-};
-
 typedef struct _pa_hal_manager pa_hal_manager;
 
 typedef enum _io_direction {
@@ -50,7 +39,6 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data);
 pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h);
 void pa_hal_manager_unref(pa_hal_manager *h);
 int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, io_direction_t direction, const char *latency, void *new_data, uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
-int32_t pa_hal_manager_reset_volume (pa_hal_manager *h);
 int32_t pa_hal_manager_get_volume_level_max (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);
 int32_t pa_hal_manager_get_volume_level (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);
 int32_t pa_hal_manager_set_volume_level (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t level);

@@ -3,8 +3,8 @@
 
 Name:             pulseaudio-modules-tizen
 Summary:          Improved Linux sound server
-Version:          5.0
-Release:          45
+Version:          5.0.46
+Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
 URL:              http://pulseaudio.org
@@ -74,6 +74,4 @@ export LD_AS_NEEDED=0
 %manifest pulseaudio-modules-tizen.manifest
 %defattr(-,root,root,-)
 %license LICENSE.LGPL-2.1+
-%{_libdir}/pulse-%{version}/modules/module-tizenaudio-sink.so
-%{_libdir}/pulse-%{version}/modules/module-sound-player.so
-%{_libdir}/pulse-%{version}/modules/module-policy.so
+%{_libdir}/pulse-5.0/modules/module-*.so

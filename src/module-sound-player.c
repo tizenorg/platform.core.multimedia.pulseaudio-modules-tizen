@@ -41,6 +41,7 @@
 #include <pulsecore/modargs.h>
 #include <pulsecore/macro.h>
 #include <pulsecore/core-util.h>
+#include <pulsecore/core-error.h>
 #ifdef HAVE_DBUS
 #include <pulsecore/dbus-shared.h>
 #include <pulsecore/protocol-dbus.h>
@@ -529,7 +530,7 @@ static void io_event_callback(pa_mainloop_api *io, pa_io_event *e, int fd, pa_io
         data_size = sizeof(data);
         memset(&data, 0, data_size);
         while (read_sum != data_size && retry_count < RETRY_NUM) {
-            ret = read(fd, ((void *)&data)+read_sum, data_size-read_sum);
+            ret = read(fd, (void*)(((char *)&data)+read_sum), data_size-read_sum);
             if (ret < 0 && errno == EAGAIN)
                 retry_count++;
             else

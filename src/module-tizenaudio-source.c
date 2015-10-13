@@ -34,7 +34,7 @@
 
 #include <pulsecore/i18n.h>
 #include <pulsecore/macro.h>
-#include <pulsecore/sink.h>
+#include <pulsecore/source.h>
 #include <pulsecore/module.h>
 #include <pulsecore/core-util.h>
 #include <pulsecore/modargs.h>
@@ -45,18 +45,18 @@
 #include <pulsecore/shared.h>
 
 #include "tizen-audio.h"
-#include "module-tizenaudio-sink-symdef.h"
+#include "module-tizenaudio-source-symdef.h"
 
 
 PA_MODULE_AUTHOR("Tizen");
-PA_MODULE_DESCRIPTION("Tizen Audio Sink");
+PA_MODULE_DESCRIPTION("Tizen Audio Source");
 PA_MODULE_VERSION(PACKAGE_VERSION);
 PA_MODULE_LOAD_ONCE(false);
 PA_MODULE_USAGE(
-        "name=<name of the sink, to be prefixed> "
-        "sink_name=<name of sink> "
-        "sink_properties=<properties for the sink> "
-        "namereg_fail=<when false attempt to synthesise new sink_name if it is already taken> "
+        "name=<name of the source, to be prefixed> "
+        "source_name=<name of source> "
+        "source_properties=<properties for the source> "
+        "namereg_fail=<when false attempt to synthesise new source_name if it is already taken> "
         "device=<ALSA device> "
         "device_id=<ALSA card index> "
         "format=<sample format> "
@@ -66,7 +66,8 @@ PA_MODULE_USAGE(
         "fragments=<number of fragments> "
         "fragment_size=<fragment size> ");
 
-#define DEFAULT_SINK_NAME "tizenaudio-sink"
+
+#define DEFAULT_SOURCE_NAME "tizenaudio-source"
 
 /* BLOCK_USEC should be less than amount of fragment_size * fragments */
 #define BLOCK_USEC (PA_USEC_PER_SEC * 0.032)
@@ -74,7 +75,7 @@ PA_MODULE_USAGE(
 struct userdata {
     pa_core *core;
     pa_module *module;
-    pa_sink *sink;
+    pa_source *source;
 
     pa_thread *thread;
     pa_thread_mq thread_mq;
@@ -88,14 +89,15 @@ struct userdata {
     char* device_name;
     bool first, after_rewind;
 
-    uint64_t write_count;
+    uint64_t read_count;
     uint64_t since_start;
+    pa_usec_t latency_time;
 };
 
 static const char* const valid_modargs[] = {
     "name",
-    "sink_name",
-    "sink_properties",
+    "source_name",
+    "source_properties",
     "namereg_fail",
     "device",
     "device_id",
@@ -141,18 +143,18 @@ static int unsuspend(struct userdata *u) {
 
     audio_data = pa_shared_get(u->core, "tizen-audio-data");
     audio_intf = pa_shared_get(u->core, "tizen-audio-interface");
-    sample_spec = u->sink->sample_spec;
+    sample_spec = u->source->sample_spec;
 
     if (audio_intf && audio_intf->pcm_open) {
         audio_return_t audio_ret = AUDIO_RET_OK;
-        if (AUDIO_IS_ERROR((audio_ret = audio_intf->pcm_open((void **)&u->pcm_handle, &sample_spec, AUDIO_DIRECTION_OUT, audio_data)))) {
+        if (AUDIO_IS_ERROR((audio_ret = audio_intf->pcm_open((void **)&u->pcm_handle, &sample_spec, AUDIO_DIRECTION_IN, audio_data)))) {
             pa_log("Error opening PCM device %x", audio_ret);
             goto fail;
         }
     }
     pa_log_info("Trying sw param...");
 
-    u->write_count = 0;
+    u->read_count = 0;
     u->first = true;
     u->since_start = 0;
 
@@ -170,45 +172,45 @@ fail:
     return -PA_ERR_IO;
 }
 
-static int sink_process_msg(
+static int source_process_msg(
         pa_msgobject *o,
         int code,
         void *data,
         int64_t offset,
         pa_memchunk *chunk) {
 
-    struct userdata *u = PA_SINK(o)->userdata;
+    struct userdata *u = PA_SOURCE(o)->userdata;
     int r;
 
     switch (code) {
-        case PA_SINK_MESSAGE_SET_STATE:
-            switch ((pa_sink_state_t) PA_PTR_TO_UINT(data)) {
-                case PA_SINK_SUSPENDED: {
-                    pa_assert(PA_SINK_IS_OPENED(u->sink->thread_info.state));
+        case PA_SOURCE_MESSAGE_SET_STATE:
+            switch ((pa_source_state_t) PA_PTR_TO_UINT(data)) {
+                case PA_SOURCE_SUSPENDED: {
+                    pa_assert(PA_SOURCE_IS_OPENED(u->source->thread_info.state));
                     if ((r = suspend(u)) < 0)
                         return r;
 
                     break;
                 }
 
-                case PA_SINK_IDLE:
-                case PA_SINK_RUNNING: {
+                case PA_SOURCE_IDLE:
+                case PA_SOURCE_RUNNING: {
                     u->timestamp = pa_rtclock_now();
-                    if (u->sink->thread_info.state == PA_SINK_SUSPENDED) {
+                    if (u->source->thread_info.state == PA_SOURCE_SUSPENDED) {
                         if ((r = unsuspend(u)) < 0)
                             return r;
                     }
                     break;
                 }
 
-                case PA_SINK_UNLINKED:
-                case PA_SINK_INIT:
-                case PA_SINK_INVALID_STATE:
+                case PA_SOURCE_UNLINKED:
+                case PA_SOURCE_INIT:
+                case PA_SOURCE_INVALID_STATE:
                     break;
             }
             break;
 
-        case PA_SINK_MESSAGE_GET_LATENCY: {
+        case PA_SOURCE_MESSAGE_GET_LATENCY: {
             pa_usec_t now;
 
             now = pa_rtclock_now();
@@ -218,77 +220,40 @@ static int sink_process_msg(
         }
     }
 
-    return pa_sink_process_msg(o, code, data, offset, chunk);
+    return pa_source_process_msg(o, code, data, offset, chunk);
 }
 
-static void sink_update_requested_latency_cb(pa_sink *s) {
+static void source_update_requested_latency_cb(pa_source *s) {
     struct userdata *u;
     size_t nbytes;
 
-    pa_sink_assert_ref(s);
+    pa_source_assert_ref(s);
     pa_assert_se(u = s->userdata);
 
-    u->block_usec = pa_sink_get_requested_latency_within_thread(s);
+    u->block_usec = pa_source_get_requested_latency_within_thread(s);
 
     if (u->block_usec == (pa_usec_t) -1)
         u->block_usec = s->thread_info.max_latency;
 
     nbytes = pa_usec_to_bytes(u->block_usec, &s->sample_spec);
-    pa_sink_set_max_rewind_within_thread(s, nbytes);
-    pa_sink_set_max_request_within_thread(s, nbytes);
-}
-
-static void process_rewind(struct userdata *u, pa_usec_t now) {
-    size_t rewind_nbytes, in_buffer;
-    pa_usec_t delay;
-
-    pa_assert(u);
-
-    rewind_nbytes = u->sink->thread_info.rewind_nbytes;
-
-    if (!PA_SINK_IS_OPENED(u->sink->thread_info.state) || rewind_nbytes <= 0)
-        goto do_nothing;
-
-    pa_log_debug("Requested to rewind %lu bytes.", (unsigned long) rewind_nbytes);
-
-    if (u->timestamp <= now)
-        goto do_nothing;
-
-    delay = u->timestamp - now;
-    in_buffer = pa_usec_to_bytes(delay, &u->sink->sample_spec);
-
-    if (in_buffer <= 0)
-        goto do_nothing;
-
-    if (rewind_nbytes > in_buffer)
-        rewind_nbytes = in_buffer;
-
-    pa_sink_process_rewind(u->sink, rewind_nbytes);
-    u->timestamp -= pa_bytes_to_usec(rewind_nbytes, &u->sink->sample_spec);
-
-    pa_log_debug("Rewound %lu bytes.", (unsigned long) rewind_nbytes);
-    return;
-
-do_nothing:
-
-    pa_sink_process_rewind(u->sink, 0);
+    pa_source_set_max_rewind_within_thread(s, nbytes);
 }
 
 static void process_render(struct userdata *u, pa_usec_t now) {
     size_t ate = 0;
     void *p;
-    size_t frames_to_write, frame_size;
+    size_t frames_to_read, frame_size;
     unsigned int avail;
-    void *audio_data;
     audio_interface_t *audio_intf;
+    void *audio_data;
 
     pa_assert(u);
 
-    audio_data = pa_shared_get(u->core, "tizen-audio-data");
     audio_intf = pa_shared_get(u->core, "tizen-audio-interface");
+    audio_data = pa_shared_get(u->core, "tizen-audio-data");
 
     if (u->first) {
-        pa_log_info("Starting playback.");
+        pa_log_info("Starting capture.");
         audio_intf->pcm_start(u->pcm_handle, audio_data);
         u->first = false;
     }
@@ -298,20 +263,28 @@ static void process_render(struct userdata *u, pa_usec_t now) {
         pa_memchunk chunk;
 
         audio_intf->pcm_avail(u->pcm_handle, &avail, audio_data);
-        frame_size = pa_frame_size(&u->sink->sample_spec);
-        frames_to_write = u->sink->thread_info.max_request / frame_size;
+        frame_size = pa_frame_size(&u->source->sample_spec);
+        frames_to_read = pa_usec_to_bytes(u->block_usec, &u->source->sample_spec) / frame_size;
 
-        pa_sink_render_full(u->sink, frames_to_write * frame_size, &chunk);
+        chunk.length = pa_usec_to_bytes(u->block_usec, &u->source->sample_spec);
+        chunk.memblock = pa_memblock_new(u->core->mempool, chunk.length);
+
+        if (frames_to_read > (size_t) avail)
+            frames_to_read = (size_t) avail;
+
         p = pa_memblock_acquire(chunk.memblock);
-
-        audio_intf->pcm_write(u->pcm_handle, (const void*) p + chunk.index, (uint32_t) frames_to_write, audio_data);
-
+        audio_intf->pcm_read(u->pcm_handle, p, (uint32_t) frames_to_read, audio_data);
         pa_memblock_release(chunk.memblock);
+
+        chunk.index = 0;
+        chunk.length = (size_t) frames_to_read * frame_size;
+        pa_source_post(u->source, &chunk);
         pa_memblock_unref(chunk.memblock);
-        u->timestamp += pa_bytes_to_usec(chunk.length, &u->sink->sample_spec);
+
+        u->timestamp += pa_bytes_to_usec(chunk.length, &u->source->sample_spec);
 
         ate += chunk.length;
-        if (ate >= u->sink->thread_info.max_request) {
+        if (ate >= pa_usec_to_bytes(u->block_usec, &u->source->sample_spec)) {
             break;
         }
     }
@@ -329,14 +302,11 @@ static void thread_func(void *userdata) {
         pa_usec_t now = 0;
         int ret;
 
-        if (PA_SINK_IS_OPENED(u->sink->thread_info.state))
+        if (PA_SOURCE_IS_OPENED(u->source->thread_info.state))
             now = pa_rtclock_now();
 
-        if (PA_UNLIKELY(u->sink->thread_info.rewind_requested))
-            process_rewind(u, now);
-
         /* Render some data and drop it immediately */
-        if (PA_SINK_IS_OPENED(u->sink->thread_info.state)) {
+        if (PA_SOURCE_IS_OPENED(u->source->thread_info.state)) {
             if (u->timestamp <= now) {
                 process_render(u, now);
             }
@@ -368,8 +338,7 @@ int pa__init(pa_module*m) {
     pa_channel_map map;
     uint32_t nfrags, frag_size;
     pa_modargs *ma = NULL;
-    pa_sink_new_data data;
-    size_t nbytes;
+    pa_source_new_data data;
     uint32_t alternate_sample_rate;
 
     pa_assert(m);
@@ -405,54 +374,53 @@ int pa__init(pa_module*m) {
     u->rtpoll = pa_rtpoll_new();
     pa_thread_mq_init(&u->thread_mq, m->core->mainloop, u->rtpoll);
 
-    pa_sink_new_data_init(&data);
+    pa_source_new_data_init(&data);
     data.driver = __FILE__;
     data.module = m;
-    pa_sink_new_data_set_name(&data, pa_modargs_get_value(ma, "sink_name", DEFAULT_SINK_NAME));
-    pa_sink_new_data_set_sample_spec(&data, &ss);
-    pa_sink_new_data_set_channel_map(&data, &map);
-    pa_proplist_sets(data.proplist, PA_PROP_DEVICE_DESCRIPTION, _("Tizen audio sink"));
+    pa_source_new_data_set_name(&data, pa_modargs_get_value(ma, "source_name", DEFAULT_SOURCE_NAME));
+    pa_source_new_data_set_sample_spec(&data, &ss);
+    pa_source_new_data_set_channel_map(&data, &map);
+    pa_proplist_sets(data.proplist, PA_PROP_DEVICE_DESCRIPTION, _("Tizen audio source"));
     pa_proplist_sets(data.proplist, PA_PROP_DEVICE_CLASS, "abstract");
     pa_proplist_sets(data.proplist, PA_PROP_DEVICE_API, "alsa");
-    pa_proplist_sets(data.proplist, "alsa.card_name", "sprdphone");  // tizenaudiosink for test
-    pa_proplist_sets(data.proplist, "alsa.card", "2");  // tizenaudiosink for test
-    pa_proplist_sets(data.proplist, "alsa.device", "0");  // tizenaudiosink for test
+    pa_proplist_sets(data.proplist, "alsa.card_name", "sprdphone");  // tizenaudiosource for test
+    pa_proplist_sets(data.proplist, "alsa.card", "2");  // tizenaudiosource for test
+    pa_proplist_sets(data.proplist, "alsa.device", "0");  // tizenaudiosource for test
 
-    if (pa_modargs_get_proplist(ma, "sink_properties", data.proplist, PA_UPDATE_REPLACE) < 0) {
+    if (pa_modargs_get_proplist(ma, "source_properties", data.proplist, PA_UPDATE_REPLACE) < 0) {
         pa_log("Invalid properties");
-        pa_sink_new_data_done(&data);
+        pa_source_new_data_done(&data);
         goto fail;
     }
 
-    u->sink = pa_sink_new(m->core, &data, PA_SINK_LATENCY);
-    pa_sink_new_data_done(&data);
+    u->source = pa_source_new(m->core, &data, PA_SOURCE_LATENCY);
+    pa_source_new_data_done(&data);
 
-    if (!u->sink) {
-        pa_log("Failed to create sink object.");
+    if (!u->source) {
+        pa_log("Failed to create source object.");
         goto fail;
     }
 
-    u->sink->parent.process_msg = sink_process_msg;
-    u->sink->update_requested_latency = sink_update_requested_latency_cb;
-    u->sink->userdata = u;
+    u->source->parent.process_msg = source_process_msg;
+    u->source->update_requested_latency = source_update_requested_latency_cb;
+    u->source->userdata = u;
 
-    pa_sink_set_asyncmsgq(u->sink, u->thread_mq.inq);
-    pa_sink_set_rtpoll(u->sink, u->rtpoll);
+    pa_source_set_asyncmsgq(u->source, u->thread_mq.inq);
+    pa_source_set_rtpoll(u->source, u->rtpoll);
 
     unsuspend (u);
 
     u->block_usec = BLOCK_USEC;
+    u->latency_time = BLOCK_USEC;
 
-    nbytes = pa_usec_to_bytes(u->block_usec, &u->sink->sample_spec);
-    pa_sink_set_max_rewind(u->sink, 0);
-    pa_sink_set_max_request(u->sink, nbytes);
+    pa_source_set_max_rewind(u->source, 0);
 
-    if (!(u->thread = pa_thread_new("tizenaudio-sink", thread_func, u))) {
+    if (!(u->thread = pa_thread_new("tizenaudio-source", thread_func, u))) {
         pa_log("Failed to create thread.");
         goto fail;
     }
-    pa_sink_set_fixed_latency(u->sink, u->block_usec);
-    pa_sink_put(u->sink);
+    pa_source_set_fixed_latency(u->source, u->block_usec);
+    pa_source_put(u->source);
     pa_modargs_free(ma);
 
     return 0;
@@ -471,7 +439,7 @@ int pa__get_n_used(pa_module *m) {
     pa_assert(m);
     pa_assert_se(u = m->userdata);
 
-    return pa_sink_linked_by(u->sink);
+    return pa_source_linked_by(u->source);
 }
 
 void pa__done(pa_module*m) {
@@ -482,8 +450,8 @@ void pa__done(pa_module*m) {
     if (!(u = m->userdata))
         return;
 
-    if (u->sink)
-        pa_sink_unlink(u->sink);
+    if (u->source)
+        pa_source_unlink(u->source);
 
     if (u->thread) {
         pa_asyncmsgq_send(u->thread_mq.inq, NULL, PA_MESSAGE_SHUTDOWN, NULL, 0, NULL);
@@ -492,8 +460,8 @@ void pa__done(pa_module*m) {
 
     pa_thread_mq_done(&u->thread_mq);
 
-    if (u->sink)
-        pa_sink_unref(u->sink);
+    if (u->source)
+        pa_source_unref(u->source);
 
     if (u->rtpoll)
         pa_rtpoll_free(u->rtpoll);

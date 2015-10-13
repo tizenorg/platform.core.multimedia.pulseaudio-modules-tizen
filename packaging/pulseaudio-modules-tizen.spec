@@ -75,5 +75,6 @@ export LD_AS_NEEDED=0
 %defattr(-,root,root,-)
 %license LICENSE.LGPL-2.1+
 %{_libdir}/pulse-%{version}/modules/module-tizenaudio-sink.so
+%{_libdir}/pulse-%{version}/modules/module-tizenaudio-source.so
 %{_libdir}/pulse-%{version}/modules/module-sound-player.so
 %{_libdir}/pulse-%{version}/modules/module-policy.so

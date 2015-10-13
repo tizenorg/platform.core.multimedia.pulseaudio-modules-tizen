@@ -688,7 +688,7 @@ static pa_bool_t pulse_device_is_tizenaudio(void *pulse_device, pa_device_type_t
     }
 
     sink = (pa_sink *) pulse_device;
-    return pa_streq(sink->module->name, "module-tizenaudio-sink");
+    return pa_streq(sink->module->name, "tizenaudio-sink");
 }
 
 static pa_bool_t pulse_device_is_usb(pa_proplist *prop) {

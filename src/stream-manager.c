@@ -2297,7 +2297,7 @@ static void update_buffer_attribute(stream_type_t stream_type, void *new_data, p
     int32_t prebuf = -1;
     int32_t minreq = -1;
     int32_t fragsize = -1;
-    const char* audio_latency = NULL;
+    hal_stream_info info;
 
     pa_assert(m);
     pa_assert(new_data);
@@ -2305,12 +2305,16 @@ static void update_buffer_attribute(stream_type_t stream_type, void *new_data, p
     if (m->hal == NULL)
         return;
 
-    audio_latency = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(new_data, stream_type), PA_PROP_MEDIA_TIZEN_AUDIO_LATENCY);
-    pa_log_info("audio_latency : %s", audio_latency);
-    if (audio_latency == NULL)
+    if ((info.latency = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(new_data, stream_type), PA_PROP_MEDIA_TIZEN_AUDIO_LATENCY)))
+        pa_log_info("audio_latency : %s", info.latency);
+    else {
+        pa_log_warn("failed to get audio_latency");
         return;
+    }
+    info.direction = (io_direction_t)!stream_type;
+    info.sample_spec = (stream_type==STREAM_SINK_INPUT)?&(((pa_sink_input*)new_data)->sample_spec):&(((pa_source_output*)new_data)->sample_spec);
 
-    if (!pa_hal_manager_get_buffer_attribute(m->hal, (io_direction_t)!stream_type, audio_latency, new_data, (uint32_t*)&maxlength, (uint32_t*)&tlength, (uint32_t*)&prebuf, (uint32_t*)&minreq, (uint32_t*)&fragsize)) {
+    if (!pa_hal_manager_get_buffer_attribute(m->hal, &info, (uint32_t*)&maxlength, (uint32_t*)&tlength, (uint32_t*)&prebuf, (uint32_t*)&minreq, (uint32_t*)&fragsize)) {
         pa_log_info(" - maxlength:%d, tlength:%d, prebuf:%d, minreq:%d, fragsize:%d", maxlength, tlength, prebuf, minreq, fragsize);
         pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "maxlength", "%d", maxlength);
         pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "tlength",   "%d", tlength);

@@ -35,10 +35,17 @@ typedef struct _hal_stream_connection_info {
     pa_bool_t is_connected;
 } hal_stream_connection_info;
 
+typedef struct _hal_stream_info {
+    io_direction_t direction;
+    const char *latency;
+    pa_sample_spec *sample_spec;
+} hal_stream_info;
+
+typedef void* pcm_handle;
+
 pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data);
 pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h);
 void pa_hal_manager_unref(pa_hal_manager *h);
-int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, io_direction_t direction, const char *latency, void *new_data, uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
 int32_t pa_hal_manager_get_volume_level_max (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);
 int32_t pa_hal_manager_get_volume_level (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);
 int32_t pa_hal_manager_set_volume_level (pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t level);
@@ -48,5 +55,10 @@ int32_t pa_hal_manager_set_mute (pa_hal_manager *h, const char *volume_type, io_
 int32_t pa_hal_manager_do_route (pa_hal_manager *h, hal_route_info *info);
 int32_t pa_hal_manager_update_route_option (pa_hal_manager *h, hal_route_option *option);
 int32_t pa_hal_manager_update_stream_connection_info (pa_hal_manager *h, hal_stream_connection_info *info);
+int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, hal_stream_info *info, uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
+int32_t pa_hal_manager_pcm_open (pa_hal_manager *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec);
+int32_t pa_hal_manager_pcm_close (pa_hal_manager *h, pcm_handle pcm_h);
+int32_t pa_hal_manager_pcm_avail (pa_hal_manager *h, pcm_handle pcm_h);
+int32_t pa_hal_manager_pcm_write (pa_hal_manager *h, pcm_handle pcm_h, const void *buffer, uint32_t frames);
 
 #endif

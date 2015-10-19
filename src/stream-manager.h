@@ -5,6 +5,9 @@
 #define IS_ROUTE_TYPE_FOR_EXTERNAL_DEV(route_type_str, route_type) \
       (route_type_str && !pa_atoi(route_type_str, (int32_t*)&route_type) && (route_type == STREAM_ROUTE_TYPE_MANUAL_EXT))
 
+#define IS_ROUTE_TYPE_FOR_AUTO(route_type_str, route_type) \
+      (route_type_str && !pa_atoi(route_type_str, (int32_t*)&route_type) && (route_type == STREAM_ROUTE_TYPE_AUTO))
+
 #define GET_STREAM_NEW_PROPLIST(stream, type) \
       (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->proplist : ((pa_source_output_new_data*)stream)->proplist)
 
@@ -59,7 +62,10 @@ typedef struct _hook_call_data_for_option {
 } pa_stream_manager_hook_data_for_option;
 
 typedef struct _hook_call_data_for_update_route {
+    void *stream;
     stream_type_t stream_type;
+    pa_bool_t is_device_connected;
+    pa_bool_t use_internal_codec;
 } pa_stream_manager_hook_data_for_update_route;
 
 int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);

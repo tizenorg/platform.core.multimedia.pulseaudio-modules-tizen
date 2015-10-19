@@ -316,6 +316,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
     char *args = NULL;
     void *s = NULL;
     uint32_t s_idx = 0;
+    pa_bool_t is_found = FALSE;
 
     pa_assert(c);
     pa_assert(data);
@@ -343,7 +344,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                 pa_log_debug("  -- conn_devices, type[%-16s], subtype[%-5s], direction[0x%x]", dm_device_type, dm_device_subtype, device_direction);
                 if (pa_streq(device_type, dm_device_type) && IS_AVAILABLE_DIRECTION(data->stream_type, device_direction)) {
                     pa_log_debug("  ** found a matched device: type[%-16s], direction[0x%x]", device_type, device_direction);
-
+                    is_found = TRUE;
                     if (data->stream_type == STREAM_SINK_INPUT) {
                         if (data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL && u->module_combine_sink) {
                             *(data->proper_sink) = (pa_sink*)pa_namereg_get(u->core, SINK_COMBINED, PA_NAMEREG_SINK);
@@ -352,12 +353,14 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                             *(data->proper_sink) = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
                     } else
                         *(data->proper_source) = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
-
-                    /* update activated device if it has the AUTO route type */
-                    if (data->route_type == STREAM_ROUTE_TYPE_AUTO)
-                        pa_proplist_sets(GET_STREAM_NEW_PROPLIST(data->stream, data->stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, dm_device_type);
-                    }
+                    break;
                 }
+            }
+            /* update activated device if it has the AUTO route type */
+            if (data->route_type == STREAM_ROUTE_TYPE_AUTO && is_found) {
+                pa_proplist_sets(GET_STREAM_NEW_PROPLIST(data->stream, data->stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, dm_device_type);
+                break;
+            }
         }
 
     } else if (data->route_type == STREAM_ROUTE_TYPE_MANUAL && data->idx_manual_devices && data->idx_avail_devices) {

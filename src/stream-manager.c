@@ -1636,16 +1636,18 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
     const int32_t *priority = NULL;
     const char *route_type_str = NULL;
     stream_route_type_t route_type;
-    const char *focus_status = NULL;
+    const char *focus_status_str = NULL;
     void *cur_max_stream = NULL;
     void *cur_max_stream_tmp = NULL;
     const int32_t *cur_max_priority = NULL;
     const char *cur_max_role = NULL;
-    int32_t cur_max_focus_status_int = 0;
-    int32_t focus_status_int = 0;
+    int32_t cur_max_focus_status = 0;
+    int32_t focus_status = 0;
     void *i = NULL;
     const char *_role = NULL;
     pa_idxset *streams = NULL;
+    pa_sink *sink = NULL;
+    pa_source *source = NULL;
 
     pa_assert(m);
     pa_assert(mine);
@@ -1665,19 +1667,33 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
     pa_log_info("update_the_highest_priority_stream(), stream_type(%d), role(%s), command(%d)", type, role, command);
     if (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED_WITH_NEW_DATA ||
         command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED) {
-        /* get focus status */
-        if (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED_WITH_NEW_DATA)
-            focus_status = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(mine, type), PA_PROP_MEDIA_FOCUS_STATUS);
-        else
-            focus_status = pa_proplist_gets(GET_STREAM_PROPLIST(mine, type), PA_PROP_MEDIA_FOCUS_STATUS);
-        if (focus_status && !pa_atoi(focus_status, &focus_status_int)) {
-            pa_log_debug("focus status(0x%x)", focus_status_int);
+        /* get focus status, route type */
+        if (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED_WITH_NEW_DATA) {
+            focus_status_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(mine, type), PA_PROP_MEDIA_FOCUS_STATUS);
+            route_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(mine, type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
+        } else {
+            focus_status_str = pa_proplist_gets(GET_STREAM_PROPLIST(mine, type), PA_PROP_MEDIA_FOCUS_STATUS);
+            route_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(mine, type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
+        }
+        if (focus_status_str && !pa_atoi(focus_status_str, &focus_status)) {
+            pa_log_debug("focus status(0x%x) of mine", focus_status);
+        }
+        /* check if this stream is for external device with ROUTE_TYPE_AUTO */
+        if (IS_ROUTE_TYPE_FOR_AUTO(route_type_str, route_type) && (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED_WITH_NEW_DATA)) {
+            if (type == STREAM_SINK_INPUT)
+                sink = ((pa_sink_input_new_data*)mine)->sink;
+            else
+                source = ((pa_source_output_new_data*)mine)->source;
+            if ((sink && !(sink->use_internal_codec)) || (source && !(source->use_internal_codec))) {
+                pa_log_warn("stream(%p) uses external device, skip it", mine);
+                *need_to_update = FALSE;
+                return TRUE;
+            }
         }
         if (cur_max_stream == NULL) {
             *need_to_update = TRUE;
             pa_log_debug("set cur_highest to mine");
         } else {
-            /* TODO : need to check if this stream should be played to external devices */
             if (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED_WITH_NEW_DATA) {
                 if (pa_proplist_get(GET_STREAM_NEW_PROPLIST(mine, type), PA_PROP_MEDIA_ROLE_PRIORITY, (const void**)&priority, &size))
                     pa_log_error("failed to pa_proplist_get() for priority");
@@ -1687,9 +1703,9 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
             }
             if (pa_proplist_get(GET_STREAM_PROPLIST(cur_max_stream, type), PA_PROP_MEDIA_ROLE_PRIORITY, (const void**)&cur_max_priority, &size))
                 pa_log_error("failed to pa_proplist_get() for priority");
-            focus_status = pa_proplist_gets(GET_STREAM_PROPLIST(cur_max_stream, type), PA_PROP_MEDIA_FOCUS_STATUS);
-            if (focus_status && !pa_atoi(focus_status, &cur_max_focus_status_int)) {
-                pa_log_debug("cur_max_focus status(0x%x)", cur_max_focus_status_int);
+            focus_status_str = pa_proplist_gets(GET_STREAM_PROPLIST(cur_max_stream, type), PA_PROP_MEDIA_FOCUS_STATUS);
+            if (focus_status_str && !pa_atoi(focus_status_str, &cur_max_focus_status)) {
+                pa_log_debug("cur_max_focus status(0x%x)", cur_max_focus_status);
             }
             cur_max_role = pa_proplist_gets(GET_STREAM_PROPLIST(cur_max_stream, type), PA_PROP_MEDIA_ROLE);
             if (!cur_max_priority || !cur_max_role) {
@@ -1697,8 +1713,8 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
                 return FALSE;
             } else {
                 if (priority && cur_max_priority) {
-                    if (IS_FOCUS_ACQUIRED(focus_status_int, type) ||
-                        (!IS_FOCUS_ACQUIRED(cur_max_focus_status_int, type) && *priority >= *cur_max_priority)) {
+                    if (IS_FOCUS_ACQUIRED(focus_status, type) ||
+                        (!IS_FOCUS_ACQUIRED(cur_max_focus_status, type) && *priority >= *cur_max_priority)) {
                         *need_to_update = TRUE;
                         pa_log_debug("update cur_highest to mine(%s)", role);
                     } else {
@@ -1718,6 +1734,8 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
             }
             /* find the next highest priority input */
             PA_IDXSET_FOREACH(i, streams, idx) {
+                if (i == mine)
+                    continue;
                 if (!(_role = pa_proplist_gets(GET_STREAM_PROPLIST(i, type), PA_PROP_MEDIA_ROLE))) {
                     pa_log_error("failed to pa_proplist_gets() for role");
                     continue;
@@ -1732,27 +1750,31 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
                 } else if (IS_ROUTE_TYPE_FOR_EXTERNAL_DEV(route_type_str, route_type)) {
                     pa_log_warn("stream(%p) has the route type for external device, skip it", i);
                     continue;
+                } else {
+                    if (type==STREAM_SINK_INPUT?!(((pa_sink_input*)i)->sink->use_internal_codec):!(((pa_source_output*)i)->source->use_internal_codec)) {
+                        pa_log_warn("stream(%p) uses external audio codec, skip it", i);
+                        continue;
+                    }
                 }
-                if (!(focus_status = pa_proplist_gets(GET_STREAM_PROPLIST(i, type), PA_PROP_MEDIA_FOCUS_STATUS))) {
+                if (!(focus_status_str = pa_proplist_gets(GET_STREAM_PROPLIST(i, type), PA_PROP_MEDIA_FOCUS_STATUS))) {
                     pa_log_warn("failed to pa_proplist_gets() for focus status");
                 } else {
-                    if (!pa_atoi(focus_status, &focus_status_int)) {
-                        pa_log_debug("focus status(0x%x)", focus_status_int);
-                        }
+                    if (!pa_atoi(focus_status_str, &focus_status))
+                        pa_log_debug("focus status(0x%x)", focus_status);
                 }
-                pa_log_debug("role(%s)/priority(%p)/route_type(%d)/focus_status(0x%x)/stream(%p)", _role, priority, route_type, focus_status_int, i);
+                pa_log_debug("role(%s)/priority(%p)/route_type(%d)/focus_status(0x%x)/stream(%p)", _role, priority, route_type, focus_status, i);
                 if (cur_max_priority == NULL) {
                     cur_max_priority = priority;
-                    cur_max_focus_status_int = focus_status_int;
+                    cur_max_focus_status = focus_status;
                     cur_max_stream_tmp = i;
                 }
                 if (cur_max_priority && priority) {
-                    if (IS_FOCUS_ACQUIRED(cur_max_focus_status_int, type) ||
-                        (!IS_FOCUS_ACQUIRED(focus_status_int, type) && (*cur_max_priority > *priority))) {
+                    if (IS_FOCUS_ACQUIRED(cur_max_focus_status, type) ||
+                        (!IS_FOCUS_ACQUIRED(focus_status, type) && (*cur_max_priority > *priority))) {
                         /* skip */
                     } else  {
                         cur_max_priority = priority;
-                        cur_max_focus_status_int = focus_status_int;
+                        cur_max_focus_status = focus_status;
                         cur_max_stream_tmp = i;
                     }
                 }
@@ -2511,6 +2533,11 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                             pa_proplist_sets(GET_STREAM_PROPLIST(m->cur_highest_priority.source_output, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, "removed");
                     }
                     do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, STREAM_SOURCE_OUTPUT, FALSE, m->cur_highest_priority.source_output);
+                    if (!((pa_source_output*)(m->cur_highest_priority.source_output))->source->use_internal_codec) {
+                        /* As only process_stream(PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED) can update the cur_highest_priority,
+                         * call it here, this would be fixed later on with new internal API */
+                        process_stream(STREAM_SOURCE_OUTPUT, m->cur_highest_priority.source_output, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED, m);
+                    }
                 }
             }
         }
@@ -2518,7 +2545,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     if (m->cur_highest_priority.sink_input && (device_direction & DM_DEVICE_DIRECTION_OUT)) {
         if (!pa_stream_manager_get_route_type(m->cur_highest_priority.sink_input, FALSE, STREAM_SINK_INPUT, &route_type)) {
             if (route_type < STREAM_ROUTE_TYPE_MANUAL) {
-                if (use_internal_codec || (!use_internal_codec && (route_type == STREAM_ROUTE_TYPE_AUTO_ALL))) {
+                if (use_internal_codec) {
                     if (route_type == STREAM_ROUTE_TYPE_AUTO && !data->is_connected) {
                         /* remove activated device info. if it has the AUTO route type */
                         active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(m->cur_highest_priority.sink_input, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
@@ -2526,7 +2553,13 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                             pa_proplist_sets(GET_STREAM_PROPLIST(m->cur_highest_priority.sink_input, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, "removed");
                     }
                     do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, STREAM_SINK_INPUT, FALSE, m->cur_highest_priority.sink_input);
-                }
+                    if ((route_type == STREAM_ROUTE_TYPE_AUTO) && !((pa_sink_input*)(m->cur_highest_priority.sink_input))->sink->use_internal_codec) {
+                        /* As only process_stream(PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED) can update the cur_highest_priority,
+                         * call it here, this would be fixed later on with new internal API */
+                        process_stream(STREAM_SINK_INPUT, m->cur_highest_priority.sink_input, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED, m);
+                    }
+                } else if (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)
+                    do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, STREAM_SINK_INPUT, FALSE, m->cur_highest_priority.sink_input);
             }
         }
     }
@@ -2548,15 +2581,29 @@ static pa_hook_result_t device_information_changed_hook_cb(pa_core *c, pa_device
     return PA_HOOK_OK;
 }
 
-/* Re-trigger for routing */
+/* Re-trigger for updating audio routing regarding internal audio codec */
 static pa_hook_result_t need_update_route_hook_cb(pa_core *c, pa_stream_manager_hook_data_for_update_route *data, pa_stream_manager *m) {
     pa_assert(c);
     pa_assert(data);
     pa_assert(m);
 
-    pa_log_info("[SM] need_update_route_hook_cb is called. data(%p), stream_type(%d)", data, data->stream_type);
+    pa_log_info("[SM] need_update_route_hook_cb is called. data(%p), stream(%p), stream_type(%d), is_device_connected(%d), use_internal_codec(%d)",
+        data, data->stream, data->stream_type, data->is_device_connected, data->use_internal_codec);
 
-    do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, data->stream_type, FALSE, (data->stream_type==STREAM_SINK_INPUT)?(void*)m->cur_highest_priority.sink_input:(void*)m->cur_highest_priority.source_output);
+    if (data->is_device_connected) {
+        /* it is caused by the connection of supported device for the stream */
+        if (data->use_internal_codec) {
+            if (((data->stream_type == STREAM_SINK_INPUT) && (!m->cur_highest_priority.sink_input || (m->cur_highest_priority.sink_input != data->stream))) ||
+                ((data->stream_type == STREAM_SOURCE_OUTPUT) && (!m->cur_highest_priority.source_output || (m->cur_highest_priority.source_output != data->stream))))
+                process_stream(data->stream_type, data->stream, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, m);
+        } else
+            process_stream(data->stream_type, data->stream, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED, m);
+    } else {
+        /* it is caused by the disconnection of external device
+         * and the supported next device of this stream using internal audio codec */
+        if (data->use_internal_codec)
+            process_stream(data->stream_type, data->stream, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, m);
+    }
 
     return PA_HOOK_OK;
 }

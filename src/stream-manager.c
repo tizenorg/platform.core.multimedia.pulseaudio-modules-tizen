@@ -2518,7 +2518,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
 
     device_direction = pa_device_manager_get_device_direction(data->device);
     device_type = pa_device_manager_get_device_type(data->device);
-    pa_device_manager_use_internal_codec(data->device, device_direction, DEVICE_ROLE_NORMAL, &use_internal_codec);
+    use_internal_codec = pa_device_manager_is_device_use_internal_codec(data->device, device_direction, DEVICE_ROLE_NORMAL);
 
     pa_log_info("[SM] device_connection_changed_hook_cb is called. data(%p), is_connected(%d), device(%p, %s), direction(0x%x), use_internal_codec(%d)",
         data, data->is_connected, data->device, device_type, device_direction, use_internal_codec);

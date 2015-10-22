@@ -363,7 +363,7 @@ struct pa_device_manager {
     */
     pa_idxset *device_status;
     pa_dbus_connection *dbus_conn;
-    dm_device_sco_status_t bt_sco_status;
+    dm_device_bt_sco_status_t bt_sco_status;
 };
 
 /***************** structures for static information get from json *********/
@@ -2521,7 +2521,7 @@ static pa_hook_result_t device_state_changed_hook_cb(pa_core *c, pa_object *o, p
         if (s->use_internal_codec) {
             if (state == PA_SINK_SUSPENDED) {
                 PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
-                    pa_device_manager_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_OUT, DEVICE_ROLE_NORMAL, &use_internal_codec);
+                    use_internal_codec = pa_device_manager_is_device_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_OUT, DEVICE_ROLE_NORMAL);
                     if (use_internal_codec)
                         pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_OUT, DM_DEVICE_STATE_DEACTIVATED);
                 }
@@ -2541,7 +2541,7 @@ static pa_hook_result_t device_state_changed_hook_cb(pa_core *c, pa_object *o, p
         if (s->use_internal_codec) {
             if (state == PA_SOURCE_SUSPENDED) {
                 PA_IDXSET_FOREACH(_device_item, dm->device_list, idx) {
-                    pa_device_manager_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_IN, DEVICE_ROLE_NORMAL, &use_internal_codec);
+                    use_internal_codec = pa_device_manager_is_device_use_internal_codec(_device_item, DM_DEVICE_DIRECTION_IN, DEVICE_ROLE_NORMAL);
                     if (use_internal_codec)
                         pa_device_manager_set_device_state(_device_item, DM_DEVICE_DIRECTION_IN, DM_DEVICE_STATE_DEACTIVATED);
                 }
@@ -3824,7 +3824,7 @@ static void handle_load_sink(DBusConnection *conn, DBusMessage *msg, void *userd
 
     if (pa_streq(device_profile, "none"))
         device_profile = NULL;
-    pa_device_manager_load_sink(device_type, device_profile, role, dm);
+    pa_device_manager_load_sink(dm, device_type, device_profile, role);
     pa_assert_se(dbus_connection_send(conn, reply, NULL));
     dbus_message_unref(reply);
 }
@@ -4114,28 +4114,28 @@ dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_i
     return profile_item->direction;
 }
 
-void pa_device_manager_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role, pa_bool_t *use_internal_codec) {
+pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role) {
     pa_sink *sink;
     pa_source *source;
+    pa_bool_t use_internal_codec;
 
     pa_assert(device_item);
-    pa_assert(use_internal_codec);
     pa_assert(role);
 
     if (direction == DM_DEVICE_DIRECTION_IN) {
         if ((source = pa_device_manager_get_source(device_item, role)))
-            *use_internal_codec = source->use_internal_codec;
+            use_internal_codec = source->use_internal_codec;
         else
-            *use_internal_codec = FALSE;
+            use_internal_codec = FALSE;
     } else if (direction == DM_DEVICE_DIRECTION_OUT) {
         if ((sink = pa_device_manager_get_sink(device_item, role)))
-            *use_internal_codec = sink->use_internal_codec;
+            use_internal_codec = sink->use_internal_codec;
         else
-            *use_internal_codec = FALSE;
+            use_internal_codec = FALSE;
     } else
-        *use_internal_codec = FALSE;
+        use_internal_codec = FALSE;
 
-    return;
+    return use_internal_codec;
 }
 
 int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
@@ -4175,7 +4175,7 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     return 0;
 }
 
-void pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_sco_status_t *status) {
+void pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_bt_sco_status_t *status) {
     pa_assert(dm);
     pa_assert(status);
 
@@ -4235,7 +4235,7 @@ int pa_device_manager_bt_sco_get_property(pa_device_manager *dm, pa_bool_t *is_w
     return 0;
 }
 
-int pa_device_manager_load_sink(const char *device_type, const char *device_profile, const char *role, pa_device_manager *dm) {
+int pa_device_manager_load_sink(pa_device_manager *dm, const char *device_type, const char *device_profile, const char *role) {
     const char *device_string, *params;
     struct device_type_info *type_info;
     struct device_file_info *file_info;
@@ -4292,7 +4292,7 @@ failed:
     return -1;
 }
 
-int pa_device_manager_load_source(const char *device_type, const char *device_profile, const char *role, pa_device_manager *dm) {
+int pa_device_manager_load_source(pa_device_manager *dm, const char *device_type, const char *device_profile, const char *role) {
     const char *device_string, *params;
     struct device_type_info *type_info;
     struct device_file_info *file_info;

@@ -947,11 +947,6 @@ static void update_sink_or_source_as_device_connection_change(stream_route_type_
                                 pa_sink_input_move_to(s, sink, FALSE);
                                 pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s), new device(%s)",
                                     s, ((pa_sink_input*)s)->index, sink, sink->name, device_type);
-                                /* update activated device */
-                                pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
-                                if ((_device = pa_device_manager_get_device(u->device_manager, device_type)))
-                                    _set_device_state(_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
-                                cached_prev_dev_list[cnt++].device_type = cur_device_type;
                                 use_internal_codec = sink->use_internal_codec;
                             }
                         } else
@@ -963,17 +958,17 @@ static void update_sink_or_source_as_device_connection_change(stream_route_type_
                                 pa_source_output_move_to(s, source, FALSE);
                                 pa_log_debug("  -- *** source-output(%p,%u) moves to source(%p,%s), new device(%s)",
                                     s, ((pa_source_output*)s)->index, source, source->name, device_type);
-                                /* update activated device */
-                                pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
-                                if ((_device = pa_device_manager_get_device(u->device_manager, device_type)))
-                                    _set_device_state(_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
-                                cached_prev_dev_list[cnt++].device_type = cur_device_type;
                                 use_internal_codec = source->use_internal_codec;
                             }
                         } else
                             pa_log_error("  -- could not find current device type for s->source(%p)", ((pa_source_output*)s)->source);
                         }
                     if (available) {
+                        /* update activated device */
+                        pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
+                        if ((_device = pa_device_manager_get_device(u->device_manager, device_type)))
+                            _set_device_state(_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
+                        cached_prev_dev_list[cnt++].device_type = cur_device_type;
                         /* trigger to update routing path */
                         memset(&hook_call_update_route_data, 0, sizeof(pa_stream_manager_hook_data_for_update_route));
                         hook_call_update_route_data.stream = s;

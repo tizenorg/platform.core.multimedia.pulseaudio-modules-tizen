@@ -91,7 +91,6 @@ struct _stream_manager {
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
-        pa_hook_slot *comm_hook_device_information_changed_slot;
         pa_hook_slot *comm_hook_need_update_route_slot;
     } comm;
 };

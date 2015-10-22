@@ -475,7 +475,7 @@ static void _set_device_state(dm_device *device, stream_type_t stream_type, dm_d
 
     pa_assert(device);
 
-    pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(stream_type), DEVICE_ROLE_NORMAL, &use_internal_codec);
+    use_internal_codec = pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(stream_type), DEVICE_ROLE_NORMAL);
     if (use_internal_codec)
         pa_device_manager_set_device_state(device, CONVERT_TO_DEVICE_DIRECTION(stream_type), device_state);
 
@@ -634,7 +634,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         dm_device_type, dm_device_subtype, device_direction, device_idx);
                 if (pa_streq(device_type, dm_device_type) && IS_AVAILABLE_DIRECTION(data->stream_type, device_direction)) {
                     pa_log_debug("  ** found a matched device: type[%-16s], direction[0x%x]", device_type, device_direction);
-                    pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL, &use_internal_codec);
+                    use_internal_codec = pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
                     if (use_internal_codec) {
                         route_info.num_of_devices++;
                         route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
@@ -652,7 +652,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             }
             if (data->route_type == STREAM_ROUTE_TYPE_AUTO && device) {
                 /* check if this device uses internal codec */
-                pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL, &use_internal_codec);
+                use_internal_codec = pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
 
                 if(use_internal_codec) {
                     /* set other device's state to deactivated */
@@ -817,7 +817,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         dm_device_subtype = pa_device_manager_get_device_subtype(device);
                         pa_log_debug("  -- manual_device, type[%-16s], subtype[%-5s], direction[0x%x]", dm_device_type, dm_device_subtype, device_direction);
                         if (IS_AVAILABLE_DIRECTION(data->stream_type, device_direction)) {
-                            pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL, &use_internal_codec);
+                            use_internal_codec = pa_device_manager_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
                             if (use_internal_codec) {
                                 route_info.num_of_devices++;
                                 route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
@@ -1151,7 +1151,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
         return PA_HOOK_OK;
     }
 
-    pa_device_manager_use_internal_codec(conn->device, device_direction, DEVICE_ROLE_NORMAL, &use_internal_codec);
+    use_internal_codec = pa_device_manager_use_internal_codec(conn->device, device_direction, DEVICE_ROLE_NORMAL);
     if (!use_internal_codec) {
         /* EXTERNAL AUDIO CODEC */
         if (!conn->is_connected && (device_direction & DM_DEVICE_DIRECTION_OUT)) {
@@ -1162,7 +1162,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                     PA_IDXSET_FOREACH(device, conn_devices, idx) {
                         device_direction = pa_device_manager_get_device_direction(device);
                         if (device_direction == DM_DEVICE_DIRECTION_OUT) {
-                            pa_device_manager_use_internal_codec(device, device_direction, DEVICE_ROLE_NORMAL, &use_internal_codec);
+                            use_internal_codec = pa_device_manager_use_internal_codec(device, device_direction, DEVICE_ROLE_NORMAL);
                             if (use_internal_codec) {
                                 sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
                                 break;

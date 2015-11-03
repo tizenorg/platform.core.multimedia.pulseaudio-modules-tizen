@@ -349,8 +349,7 @@ AM_ICONV
 
 #### json parsing ####
 
-PKG_CHECK_MODULES(LIBJSON, [ json-c >= 0.11 ], [],
-		  [PKG_CHECK_MODULES(LIBJSON, [ json >= 0.9 ])])
+PKG_CHECK_MODULES(LIBJSON, [ json-c >= 0.11 ])
 
 #### Sound file ####
 PKG_CHECK_MODULES(INIPARSER, iniparser)

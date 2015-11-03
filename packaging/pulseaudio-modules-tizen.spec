@@ -3,7 +3,7 @@
 
 Name:             pulseaudio-modules-tizen
 Summary:          Improved Linux sound server
-Version:          5.0.7
+Version:          5.0.8
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -48,7 +48,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 export LD_AS_NEEDED=0
 %reconfigure --prefix=%{_prefix} \
         --disable-static \
-        --enable-alsa \
         --enable-systemd \
         --with-database=tdb \
 %if %{with pulseaudio_dlog}
@@ -75,3 +74,4 @@ export LD_AS_NEEDED=0
 %defattr(-,root,root,-)
 %license LICENSE.LGPL-2.1+
 %{_libdir}/pulse-5.0/modules/module-*.so
+%{_libdir}/pulse-5.0/modules/libhal-manager.so

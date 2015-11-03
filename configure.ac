@@ -379,33 +379,6 @@ fi
 AM_CONDITIONAL(USE_DLOG, test "x$USE_DLOG" = "xyes")
 dnl end --------------------------------------------------------------------
 
-#### ALSA support (optional) ####
-
-AC_ARG_ENABLE([alsa],
-    AS_HELP_STRING([--disable-alsa],[Disable optional ALSA support]))
-
-AS_IF([test "x$enable_alsa" != "xno"],
-    [PKG_CHECK_MODULES(ASOUNDLIB, [ alsa >= 1.0.19 ], HAVE_ALSA=1, HAVE_ALSA=0)],
-    HAVE_ALSA=0)
-
-AS_IF([test "x$enable_alsa" = "xyes" && test "x$HAVE_ALSA" = "x0"],
-    [AC_MSG_ERROR([*** Needed alsa >= 1.0.19 support not found])])
-
-AS_IF([test "x$HAVE_ALSA" = "x1"],
-    [
-        save_CPPFLAGS="$CPPFLAGS"; CPPFLAGS="$CPPFLAGS $ASOUNDLIB_CFLAGS"
-        AC_CHECK_HEADERS([use-case.h], HAVE_ALSA_UCM=1, HAVE_ALSA_UCM=0)
-        CPPFLAGS="$save_CPPFLAGS"
-    ],
-    HAVE_ALSA_UCM=0)
-
-AC_SUBST(ASOUNDLIB_CFLAGS)
-AC_SUBST(ASOUNDLIB_LIBS)
-AC_SUBST(HAVE_ALSA)
-AM_CONDITIONAL([HAVE_ALSA], [test "x$HAVE_ALSA" = x1])
-AS_IF([test "x$HAVE_ALSA" = "x1"], AC_DEFINE([HAVE_ALSA], 1, [Have ALSA?]))
-AS_IF([test "x$HAVE_ALSA_UCM" = "x1"], AC_DEFINE([HAVE_ALSA_UCM], 1, [Have ALSA UCM?]))
-
 #### D-Bus support (optional) ####
 
 AC_ARG_ENABLE([dbus],

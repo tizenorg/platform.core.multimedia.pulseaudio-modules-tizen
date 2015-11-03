@@ -6,7 +6,6 @@
 #include <strings.h>
 #include <vconf.h> // for mono
 #include <iniparser.h>
-#include <asoundlib.h>
 #include <unistd.h>
 #include <pthread.h>
 

@@ -3,7 +3,7 @@
 
 Name:             pulseaudio-modules-tizen
 Summary:          Improved Linux sound server
-Version:          5.0.8
+Version:          5.0.9
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -12,7 +12,6 @@ Source0:          http://www.freedesktop.org/software/pulseaudio/releases/%{name
 BuildRequires:    libtool-ltdl-devel
 BuildRequires:    libtool
 BuildRequires:    intltool
-BuildRequires:    pkgconfig(alsa)
 BuildRequires:    pkgconfig(dbus-1)
 BuildRequires:    pkgconfig(iniparser)
 BuildRequires:    pkgconfig(libudev)

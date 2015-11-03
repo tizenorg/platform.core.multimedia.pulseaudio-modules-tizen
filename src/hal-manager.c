@@ -367,7 +367,7 @@ int32_t pa_hal_manager_pcm_close(pa_hal_manager *h, pcm_handle pcm_h) {
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_available(pa_hal_manager *h, pcm_handle pcm_h, uint32_t *available) {
+int32_t pa_hal_manager_pcm_avail(pa_hal_manager *h, pcm_handle pcm_h, uint32_t *available) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 

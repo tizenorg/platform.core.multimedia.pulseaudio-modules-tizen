@@ -3,7 +3,7 @@
 
 Name:             pulseaudio-modules-tizen
 Summary:          Improved Linux sound server
-Version:          5.0.7
+Version:          5.0.8
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+

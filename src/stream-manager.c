@@ -94,6 +94,7 @@ enum method_handler_index {
 static pa_dbus_arg_info get_stream_info_args[]  = { { "stream_type", "s", "in" },
                                                       { "priority", "i", "out" },
                                                     { "route_type", "i", "out" },
+                                                 { "volume_types", "as", "out" },
                                              { "avail_in_devices", "as", "out" },
                                             { "avail_out_devices", "as", "out" },
                                             { "avail_frameworks", "as", "out"} };
@@ -224,6 +225,7 @@ static pa_dbus_interface_info stream_manager_interface_info = {
     "   <arg name=\"stream_type\" direction=\"in\" type=\"s\"/>"             \
     "   <arg name=\"priority\" direction=\"out\" type=\"i\"/>"               \
     "   <arg name=\"route_type\" direction=\"out\" type=\"i\"/>"             \
+    "   <arg name=\"volume_types\" direction=\"out\" type=\"as\"/>"          \
     "   <arg name=\"avail_in_devices\" direction=\"out\" type=\"as\"/>"      \
     "   <arg name=\"avail_out_devices\" direction=\"out\" type=\"as\"/>"     \
     "   <arg name=\"avail_frameworks\" direction=\"out\" type=\"as\"/>"      \
@@ -387,13 +389,14 @@ typedef struct _stream_info_per_type {
     int32_t num_of_in_devices;
     int32_t num_of_out_devices;
     int32_t num_of_frameworks;
+    char *volume_types[STREAM_DIRECTION_MAX];
     char *avail_in_devices[AVAIL_DEVICES_MAX];
     char *avail_out_devices[AVAIL_DEVICES_MAX];
     char *avail_frameworks[AVAIL_FRAMEWORKS_MAX];
 } stream_info_per_type;
 typedef struct _stream_list {
     int32_t num_of_streams;
-    char* types[AVAIL_STREAMS_MAX];
+    char *types[AVAIL_STREAMS_MAX];
     int32_t priorities[AVAIL_STREAMS_MAX];
 } stream_list;
 typedef struct _stream_route_option {
@@ -434,40 +437,42 @@ static int get_available_streams(pa_stream_manager *m, stream_list *list) {
 static int get_stream_info(pa_stream_manager *m, const char *stream_role, stream_info_per_type *info) {
     uint32_t idx = 0;
     char *name;
-    stream_info *s = NULL;
     int i = 0;
-    int j = 0;
-    int k = 0;
+    stream_info *s = NULL;
     pa_log_info("get_stream_info : role[%s]", stream_role);
     if (m->stream_infos) {
         s = pa_hashmap_get(m->stream_infos, stream_role);
         if (s) {
             info->priority = s->priority;
             info->route_type = s->route_type;
+            for (i = 0; i < STREAM_DIRECTION_MAX; i++) {
+                pa_log_debug("  volume_types[%d] name : %s", i, s->volume_types[i]);
+                info->volume_types[i] = s->volume_types[i];
+            }
             PA_IDXSET_FOREACH(name, s->idx_avail_in_devices, idx) {
-                pa_log_debug("  avail-in-device[%d] name  : %s", i, name);
-                if (i < AVAIL_DEVICES_MAX)
-                    info->avail_in_devices[i++] = name;
+                pa_log_debug("  avail-in-device[%d] name  : %s", idx, name);
+                if (idx < AVAIL_DEVICES_MAX)
+                    info->avail_in_devices[idx] = name;
                 else
-                    pa_log_error("  avail-in-devices, out of range, [%d]", i);
+                    pa_log_error("  avail-in-devices, out of range, [%d]", idx);
             }
-            info->num_of_in_devices = i;
+            info->num_of_in_devices = pa_idxset_size(s->idx_avail_in_devices);
             PA_IDXSET_FOREACH(name, s->idx_avail_out_devices, idx) {
-                pa_log_debug("  avail-out-device[%d] name  : %s", j, name);
-                if (j < AVAIL_DEVICES_MAX)
-                    info->avail_out_devices[j++] = name;
+                pa_log_debug("  avail-out-device[%d] name  : %s", idx, name);
+                if (idx < AVAIL_DEVICES_MAX)
+                    info->avail_out_devices[idx] = name;
                 else
-                    pa_log_error("  avail-out-devices, out of range, [%d]", j);
+                    pa_log_error("  avail-out-devices, out of range, [%d]", idx);
             }
-            info->num_of_out_devices = j;
+            info->num_of_out_devices = pa_idxset_size(s->idx_avail_out_devices);
             PA_IDXSET_FOREACH(name, s->idx_avail_frameworks, idx) {
-                pa_log_debug("  avail-frameworks[%d] name  : %s", k, name);
-                if (k < AVAIL_FRAMEWORKS_MAX)
-                    info->avail_frameworks[k++] = name;
+                pa_log_debug("  avail-frameworks[%d] name  : %s", idx, name);
+                if (idx < AVAIL_FRAMEWORKS_MAX)
+                    info->avail_frameworks[idx] = name;
                 else
-                    pa_log_error("  avail-frameworks, out of range, [%d]", k);
+                    pa_log_error("  avail-frameworks, out of range, [%d]", idx);
             }
-            info->num_of_frameworks = k;
+            info->num_of_frameworks = pa_idxset_size(s->idx_avail_frameworks);
         }
     } else {
         pa_log_error("stream_map is not initialized..");
@@ -546,12 +551,14 @@ static void handle_get_stream_info(DBusConnection *conn, DBusMessage *msg, void 
     if(!get_stream_info(m, type, &info)) {
         pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.priority);
         pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.route_type);
+        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.volume_types, STREAM_DIRECTION_MAX);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_in_devices, info.num_of_in_devices);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_out_devices, info.num_of_out_devices);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_frameworks, info.num_of_frameworks);
     } else {
         pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, 0);
         pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, 0);
+        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
         pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
@@ -1179,7 +1186,7 @@ static void dump_stream_map (pa_stream_manager *m) {
         pa_log_debug("[role : %s]", role);
         pa_log_debug("  - priority   : %d", s->priority);
         pa_log_debug("  - route-type : %d (0:auto,1:auto-all,2:manual,3:manual-ext)", s->route_type);
-        pa_log_debug("  - volume-types : in[%s], out[%s]", s->volume_type[STREAM_DIRECTION_IN], s->volume_type[STREAM_DIRECTION_OUT]);
+        pa_log_debug("  - volume-types : in[%s], out[%s]", s->volume_types[STREAM_DIRECTION_IN], s->volume_types[STREAM_DIRECTION_OUT]);
         pa_log_debug("  - avail-in-devices");
         PA_IDXSET_FOREACH(name, s->idx_avail_in_devices, idx)
             pa_log_debug("      name[%d]  : %s", idx, name);
@@ -1222,8 +1229,6 @@ static int init_stream_map (pa_stream_manager *m) {
     json_object *framework_o;
     json_object *volume_o;
     json_object *stream_o;
-    const char *volume_type_in_str = NULL;
-    const char *volume_type_out_str = NULL;
     json_object *volume_type_in_o;
     json_object *volume_type_out_o;
     void *state = NULL;
@@ -1297,23 +1302,19 @@ static int init_stream_map (pa_stream_manager *m) {
                     goto failed;
                 }
                 if((volume_types_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_VOLUME_TYPES)) && json_object_is_type(volume_types_o, json_type_object)) {
-                    if((volume_type_in_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN)) && json_object_is_type(volume_type_in_o, json_type_string)) {
-                        volume_type_in_str = json_object_get_string(volume_type_in_o);
-                        if (!pa_streq(volume_type_in_str, "none"))
-                            s->volume_type[STREAM_DIRECTION_IN] = volume_type_in_str;
-                    } else {
+                    if((volume_type_in_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN)) && json_object_is_type(volume_type_in_o, json_type_string))
+                        s->volume_types[STREAM_DIRECTION_IN] = json_object_get_string(volume_type_in_o);
+                    else {
                         pa_log_error("Get stream volume-type-in failed");
                         goto failed;
                     }
-                    if((volume_type_out_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT)) && json_object_is_type(volume_type_out_o, json_type_string)) {
-                        volume_type_out_str = json_object_get_string(volume_type_out_o);
-                        if (!pa_streq(volume_type_out_str, "none"))
-                            s->volume_type[STREAM_DIRECTION_OUT] = volume_type_out_str;
-                    } else {
+                    if((volume_type_out_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT)) && json_object_is_type(volume_type_out_o, json_type_string))
+                        s->volume_types[STREAM_DIRECTION_OUT] = json_object_get_string(volume_type_out_o);
+                    else {
                         pa_log_error("Get stream volume-type-out failed");
                         goto failed;
                     }
-                    pa_log_debug(" - volume-types : in[%s], out[%s]", s->volume_type[STREAM_DIRECTION_IN], s->volume_type[STREAM_DIRECTION_OUT]);
+                    pa_log_debug(" - volume-types : in[%s], out[%s]", s->volume_types[STREAM_DIRECTION_IN], s->volume_types[STREAM_DIRECTION_OUT]);
                 } else {
                     pa_log_error("Get stream volume-types failed");
                     goto failed;
@@ -1543,11 +1544,11 @@ static pa_bool_t update_volume_type_of_stream(pa_stream_manager *m, stream_type_
     if (m->stream_infos) {
         s = pa_hashmap_get(m->stream_infos, role);
         if (s)
-            volume_type = s->volume_type[!type];
+            volume_type = s->volume_types[!type];
     } else
         return FALSE;
 
-    if (volume_type)
+    if (volume_type && (!pa_streq(volume_type, "none")))
         pa_proplist_sets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE, volume_type);
     else
         pa_log_warn("this stream[%p] does not have any volume type, skip updating volume type. stream_type[%d], role[%s]", stream, type, role);

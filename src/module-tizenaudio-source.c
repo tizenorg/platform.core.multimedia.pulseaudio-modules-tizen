@@ -42,9 +42,8 @@
 #include <pulsecore/thread.h>
 #include <pulsecore/thread-mq.h>
 #include <pulsecore/rtpoll.h>
-#include <pulsecore/shared.h>
 
-#include "tizen-audio.h"
+#include "hal-manager.h"
 #include "module-tizenaudio-source-symdef.h"
 
 
@@ -92,6 +91,7 @@ struct userdata {
     uint64_t read_count;
     uint64_t since_start;
     pa_usec_t latency_time;
+    pa_hal_manager *hal_manager;
 };
 
 static const char* const valid_modargs[] = {
@@ -112,19 +112,15 @@ static const char* const valid_modargs[] = {
 
 /* Called from IO context */
 static int suspend(struct userdata *u) {
-    void *audio_data;
-    audio_interface_t *audio_intf;
-
+    int32_t ret;
     pa_assert(u);
     pa_assert(u->pcm_handle);
 
-    audio_data = pa_shared_get(u->core, "tizen-audio-data");
-    audio_intf = pa_shared_get(u->core, "tizen-audio-interface");
-
-    if (audio_intf && audio_intf->pcm_close) {
-        audio_intf->pcm_close(audio_data, u->pcm_handle);
-        u->pcm_handle = NULL;
+    ret = pa_hal_manager_pcm_close(u->hal_manager, u->pcm_handle);
+    if (ret) {
+        pa_log("Error closing PCM device %x", ret);
     }
+    u->pcm_handle = NULL;
     pa_log_info("Device suspended...[%s]", u->device_name);
 
     return 0;
@@ -133,24 +129,16 @@ static int suspend(struct userdata *u) {
 /* Called from IO context */
 static int unsuspend(struct userdata *u) {
     pa_sample_spec sample_spec;
-    void *audio_data;
-    audio_interface_t *audio_intf;
-
+    int32_t ret;
     pa_assert(u);
     pa_assert(!u->pcm_handle);
 
     pa_log_info("Trying resume...");
-
-    audio_data = pa_shared_get(u->core, "tizen-audio-data");
-    audio_intf = pa_shared_get(u->core, "tizen-audio-interface");
     sample_spec = u->source->sample_spec;
-
-    if (audio_intf && audio_intf->pcm_open) {
-        audio_return_t audio_ret = AUDIO_RET_OK;
-        if (AUDIO_IS_ERROR((audio_ret = audio_intf->pcm_open(audio_data, (void **)&u->pcm_handle, &sample_spec, AUDIO_DIRECTION_IN)))) {
-            pa_log("Error opening PCM device %x", audio_ret);
-            goto fail;
-        }
+    ret = pa_hal_manager_pcm_open(u->hal_manager, (void **)&u->pcm_handle, DIRECTION_IN, &sample_spec);
+    if (ret) {
+        pa_log("Error opening PCM device %x", ret);
+        goto fail;
     }
     pa_log_info("Trying sw param...");
 
@@ -164,9 +152,7 @@ static int unsuspend(struct userdata *u) {
 
 fail:
     if (u->pcm_handle) {
-        if (audio_intf && audio_intf->pcm_close)
-            audio_intf->pcm_close(audio_data, u->pcm_handle);
-
+        pa_hal_manager_pcm_close(u->hal_manager, u->pcm_handle);
         u->pcm_handle = NULL;
     }
     return -PA_ERR_IO;
@@ -244,17 +230,11 @@ static void process_render(struct userdata *u, pa_usec_t now) {
     void *p;
     size_t frames_to_read, frame_size;
     uint32_t avail;
-    audio_interface_t *audio_intf;
-    void *audio_data;
-
     pa_assert(u);
-
-    audio_intf = pa_shared_get(u->core, "tizen-audio-interface");
-    audio_data = pa_shared_get(u->core, "tizen-audio-data");
 
     if (u->first) {
         pa_log_info("Starting capture.");
-        audio_intf->pcm_start(audio_data, u->pcm_handle);
+        pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
         u->first = false;
     }
 
@@ -262,7 +242,7 @@ static void process_render(struct userdata *u, pa_usec_t now) {
     while (u->timestamp < now + u->block_usec) {
         pa_memchunk chunk;
 
-        audio_intf->pcm_avail(audio_data, u->pcm_handle, &avail);
+        pa_hal_manager_pcm_available(u->hal_manager, u->pcm_handle, &avail);
         frame_size = pa_frame_size(&u->source->sample_spec);
         frames_to_read = pa_usec_to_bytes(u->block_usec, &u->source->sample_spec) / frame_size;
 
@@ -273,7 +253,7 @@ static void process_render(struct userdata *u, pa_usec_t now) {
             frames_to_read = (size_t)avail;
 
         p = pa_memblock_acquire(chunk.memblock);
-        audio_intf->pcm_read(audio_data, u->pcm_handle, p, (uint32_t)frames_to_read);
+        pa_hal_manager_pcm_read(u->hal_manager, u->pcm_handle, p, (uint32_t)frames_to_read);
         pa_memblock_release(chunk.memblock);
 
         chunk.index = 0;
@@ -371,6 +351,7 @@ int pa__init(pa_module*m) {
     u->core = m->core;
     u->module = m;
     u->first = true;
+    u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
     u->rtpoll = pa_rtpoll_new();
     pa_thread_mq_init(&u->thread_mq, m->core->mainloop, u->rtpoll);
 

@@ -43,7 +43,6 @@
 #include "communicator.h"
 #include "hal-manager.h"
 #include "stream-manager.h"
-#include "stream-manager-volume.h"
 #include "device-manager.h"
 
 PA_MODULE_AUTHOR("Seungbae Shin");

@@ -50,8 +50,8 @@ int32_t pa_hal_manager_get_volume_level_max(pa_hal_manager *h, const char *volum
 int32_t pa_hal_manager_get_volume_level(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);
 int32_t pa_hal_manager_set_volume_level(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t level);
 int32_t pa_hal_manager_get_volume_value(pa_hal_manager *h, const char *volume_type, const char *gain_type, io_direction_t direction, uint32_t level, double *value);
-int32_t pa_hal_manager_get_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute);
-int32_t pa_hal_manager_set_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute);
+int32_t pa_hal_manager_get_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute);
+int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute);
 int32_t pa_hal_manager_do_route(pa_hal_manager *h, hal_route_info *info);
 int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *option);
 int32_t pa_hal_manager_update_stream_connection_info(pa_hal_manager *h, hal_stream_connection_info *info);

@@ -389,10 +389,10 @@ typedef struct _stream_info_per_type {
     int32_t num_of_in_devices;
     int32_t num_of_out_devices;
     int32_t num_of_frameworks;
-    char *volume_types[STREAM_DIRECTION_MAX];
-    char *avail_in_devices[AVAIL_DEVICES_MAX];
-    char *avail_out_devices[AVAIL_DEVICES_MAX];
-    char *avail_frameworks[AVAIL_FRAMEWORKS_MAX];
+    const char *volume_types[STREAM_DIRECTION_MAX];
+    const char *avail_in_devices[AVAIL_DEVICES_MAX];
+    const char *avail_out_devices[AVAIL_DEVICES_MAX];
+    const char *avail_frameworks[AVAIL_FRAMEWORKS_MAX];
 } stream_info_per_type;
 typedef struct _stream_list {
     int32_t num_of_streams;
@@ -1402,6 +1402,7 @@ static void deinit_stream_map (pa_stream_manager *m) {
     stream_info *s = NULL;
     volume_info *v = NULL;
     void *state = NULL;
+
     pa_assert(m);
 
     if (m->stream_infos) {
@@ -1464,13 +1465,12 @@ static pa_bool_t check_role_to_skip(pa_stream_manager *m, const char *role) {
     stream_info *s = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
 
-    if (m->stream_infos) {
-        s = pa_hashmap_get(m->stream_infos, role);
-        if (s)
-            ret = FALSE;
-    }
+    if ((s = pa_hashmap_get(m->stream_infos, role)))
+        ret = FALSE;
+
     pa_log_info("role is [%s], skip(%d)", role, ret);
 
     return ret;
@@ -1479,6 +1479,7 @@ static pa_bool_t check_role_to_skip(pa_stream_manager *m, const char *role) {
 static pa_bool_t check_route_type_to_skip(process_command_type_t command, const char *route_type_str) {
     pa_bool_t ret = FALSE;
     stream_route_type_t route_type;
+
     pa_assert(route_type_str);
 
     if (!pa_atoi(route_type_str, (int32_t*)&route_type)) {
@@ -1495,65 +1496,61 @@ static pa_bool_t check_route_type_to_skip(process_command_type_t command, const 
 }
 
 static pa_bool_t update_priority_of_stream(pa_stream_manager *m, stream_type_t type, void *stream, const char *role, pa_bool_t is_new_data) {
+    pa_bool_t ret = FALSE;
     stream_info *s = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
 
-    if (m->stream_infos)
-        s = pa_hashmap_get(m->stream_infos, role);
-    else
-        return FALSE;
-
-    if (s) {
+    if ((s = pa_hashmap_get(m->stream_infos, role))) {
         if (is_new_data)
             pa_proplist_set(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE_PRIORITY, (const void*)&(s->priority), sizeof(s->priority));
         else
             pa_proplist_set(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE_PRIORITY, (const void*)&(s->priority), sizeof(s->priority));
+        ret = TRUE;
     }
 
-    return TRUE;
+    return ret;
 }
 
 static pa_bool_t update_route_type_of_stream(pa_stream_manager *m, void *stream, stream_type_t type, const char *role) {
+    pa_bool_t ret = FALSE;
     stream_route_type_t route_type = STREAM_ROUTE_TYPE_AUTO;
     stream_info *s = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
 
-    if (m->stream_infos) {
-        s = pa_hashmap_get(m->stream_infos, role);
-        if (s)
-            route_type = s->route_type;
-    } else
-        return FALSE;
+    if ((s = pa_hashmap_get(m->stream_infos, role))) {
+        route_type = s->route_type;
+        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE, "%d", route_type);
+        ret = TRUE;
+    }
 
-    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE, "%d", route_type);
-
-    return TRUE;
+    return ret;
 }
 
 static pa_bool_t update_volume_type_of_stream(pa_stream_manager *m, stream_type_t type, void *stream, const char *role) {
+    pa_bool_t ret = FALSE;
     const char *volume_type = NULL;
     stream_info *s = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
 
-    if (m->stream_infos) {
-        s = pa_hashmap_get(m->stream_infos, role);
-        if (s)
-            volume_type = s->volume_types[!type];
-    } else
-        return FALSE;
+    if ((s = pa_hashmap_get(m->stream_infos, role)))
+        volume_type = s->volume_types[type];
 
-    if (volume_type && (!pa_streq(volume_type, "none")))
+    if (volume_type && (!pa_streq(volume_type, "none"))) {
         pa_proplist_sets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE, volume_type);
-    else
+        ret = TRUE;
+    } else
         pa_log_warn("this stream[%p] does not have any volume type, skip updating volume type. stream_type[%d], role[%s]", stream, type, role);
 
-    return TRUE;
+    return ret;
 }
 
 static pa_bool_t update_focus_status_of_stream(pa_stream_manager *m, void *stream, stream_type_t type, pa_bool_t is_new_data) {
@@ -2253,17 +2250,17 @@ static process_stream_result_t process_stream(pa_stream_manager *m, stream_type_
     } else if (command == PROCESS_COMMAND_UPDATE_VOLUME && is_new_data) {
         if ((si_volume_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
             v = pa_hashmap_get(m->volume_infos, si_volume_type_str);
-            if (v && v->values[(type==STREAM_SINK_INPUT)?STREAM_DIRECTION_OUT:STREAM_DIRECTION_IN].idx_volume_values) {
+            if (v && v->values[type].idx_volume_values) {
                 /* Update volume-level */
-                volume_ret = set_volume_level_with_new_data(m, type, stream, v->values[(type==STREAM_SINK_INPUT)?STREAM_DIRECTION_OUT:STREAM_DIRECTION_IN].current_level);
+                volume_ret = set_volume_level_with_new_data(m, type, stream, v->values[type].current_level);
                 if (volume_ret)
                     pa_log_error("failed to set_volume_level_by_idx(), stream_type(%d), level(%u), ret(0x%x)",
-                            STREAM_SINK_INPUT, v->values[(type==STREAM_SINK_INPUT)?STREAM_DIRECTION_OUT:STREAM_DIRECTION_IN].current_level, volume_ret);
+                        type, v->values[type].current_level, volume_ret);
                 /* Update volume-mute */
-                volume_ret = set_volume_mute_with_new_data(m, type, stream, v->values[(type==STREAM_SINK_INPUT)?STREAM_DIRECTION_OUT:STREAM_DIRECTION_IN].is_muted);
+                volume_ret = set_volume_mute_with_new_data(m, type, stream, v->values[type].is_muted);
                 if (volume_ret)
                     pa_log_error("failed to set_volume_mute_by_idx(), stream_type(%d), mute(%d), ret(0x%x)",
-                            STREAM_SINK_INPUT, v->values[(type==STREAM_SINK_INPUT)?STREAM_DIRECTION_OUT:STREAM_DIRECTION_IN].is_muted, volume_ret);
+                        type, v->values[type].is_muted, volume_ret);
             }
         }
 

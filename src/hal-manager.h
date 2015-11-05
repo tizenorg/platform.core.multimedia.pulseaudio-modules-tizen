@@ -63,5 +63,9 @@ int32_t pa_hal_manager_pcm_close(pa_hal_manager *h, pcm_handle pcm_h);
 int32_t pa_hal_manager_pcm_available(pa_hal_manager *h, pcm_handle pcm_h, uint32_t *available);
 int32_t pa_hal_manager_pcm_write(pa_hal_manager *h, pcm_handle pcm_h, const void *buffer, uint32_t frames);
 int32_t pa_hal_manager_pcm_read(pa_hal_manager *h, pcm_handle pcm_h, void *buffer, uint32_t frames);
+int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd);
+int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err);
+int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *frag_size, uint32_t *nfrags);
+int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t frag_size, uint32_t nfrags);
 
 #endif

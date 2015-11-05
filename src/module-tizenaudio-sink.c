@@ -42,8 +42,10 @@
 #include <pulsecore/thread.h>
 #include <pulsecore/thread-mq.h>
 #include <pulsecore/rtpoll.h>
+#include <pulsecore/poll.h>
 
 #include "hal-manager.h"
+#include "tizen-audio.h"
 #include "module-tizenaudio-sink-symdef.h"
 
 
@@ -85,10 +87,11 @@ struct userdata {
     pa_usec_t timestamp;
 
     char* device_name;
-    bool first, after_rewind;
+    bool first;
+
+    pa_rtpoll_item *rtpoll_item;
 
     uint64_t write_count;
-    uint64_t since_start;
     pa_hal_manager *hal_manager;
 };
 
@@ -108,6 +111,30 @@ static const char* const valid_modargs[] = {
     NULL
 };
 
+static int build_pollfd (struct userdata *u) {
+    int32_t ret;
+    struct pollfd *pollfd;
+    int fd = -1;
+
+    pa_assert(u);
+    pa_assert(u->pcm_handle && u->rtpoll);
+
+    if (u->rtpoll_item)
+        pa_rtpoll_item_free(u->rtpoll_item);
+
+    u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
+    pollfd = pa_rtpoll_item_get_pollfd(u->rtpoll_item, NULL);
+    ret = pa_hal_manager_pcm_get_fd(u->hal_manager, u->pcm_handle, &fd);
+    if (ret) {
+        pa_log("Failed to get fd of PCM device %d", ret);
+        return ret;
+    }
+    pollfd->fd = fd;
+    pollfd->events = POLLOUT | POLLERR | POLLNVAL;
+
+    return 0;
+}
+
 /* Called from IO context */
 static int suspend(struct userdata *u) {
     int32_t ret;
@@ -119,6 +146,12 @@ static int suspend(struct userdata *u) {
         pa_log("Error closing PCM device %x", ret);
     }
     u->pcm_handle = NULL;
+
+    if (u->rtpoll_item) {
+        pa_rtpoll_item_free(u->rtpoll_item);
+        u->rtpoll_item = NULL;
+    }
+
     pa_log_info("Device suspended...[%s]", u->device_name);
 
     return 0;
@@ -138,11 +171,14 @@ static int unsuspend(struct userdata *u) {
         pa_log("Error opening PCM device %x", ret);
         goto fail;
     }
+
+    if (build_pollfd(u) < 0)
+        goto fail;
+
     pa_log_info("Trying sw param...");
 
     u->write_count = 0;
     u->first = true;
-    u->since_start = 0;
 
     pa_log_info("Resumed successfully...");
 
@@ -179,6 +215,11 @@ static int sink_process_msg(
 
                 case PA_SINK_IDLE:
                 case PA_SINK_RUNNING: {
+                    if (u->sink->thread_info.state == PA_SINK_INIT) {
+                        if (build_pollfd(u) < 0)
+                            return -PA_ERR_IO;
+                    }
+
                     u->timestamp = pa_rtclock_now();
                     if (u->sink->thread_info.state == PA_SINK_SUSPENDED) {
                         if ((r = unsuspend(u)) < 0)
@@ -225,6 +266,10 @@ static void sink_update_requested_latency_cb(pa_sink *s) {
 }
 
 static void process_rewind(struct userdata *u, pa_usec_t now) {
+#if 1
+    /* Rewind not supported */
+    pa_sink_process_rewind(u->sink, 0);
+#else
     size_t rewind_nbytes, in_buffer;
     pa_usec_t delay;
 
@@ -256,8 +301,8 @@ static void process_rewind(struct userdata *u, pa_usec_t now) {
     return;
 
 do_nothing:
-
     pa_sink_process_rewind(u->sink, 0);
+#endif
 }
 
 static void process_render(struct userdata *u, pa_usec_t now) {
@@ -266,12 +311,6 @@ static void process_render(struct userdata *u, pa_usec_t now) {
     size_t frames_to_write, frame_size;
     uint32_t avail;
     pa_assert(u);
-
-    if (u->first) {
-        pa_log_info("Starting playback.");
-        pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
-        u->first = false;
-    }
 
     /* Fill the buffer up the latency size */
     while (u->timestamp < now + u->block_usec) {
@@ -299,6 +338,7 @@ static void process_render(struct userdata *u, pa_usec_t now) {
 
 static void thread_func(void *userdata) {
     struct userdata *u = userdata;
+    unsigned short revents = 0;
 
     pa_assert(u);
     pa_log_debug("Thread starting up");
@@ -319,6 +359,12 @@ static void thread_func(void *userdata) {
         if (PA_SINK_IS_OPENED(u->sink->thread_info.state)) {
             if (u->timestamp <= now) {
                 process_render(u, now);
+
+                if (u->first) {
+                    pa_log_info("Starting playback.");
+                    pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
+                    u->first = false;
+                }
             }
             pa_rtpoll_set_timer_absolute(u->rtpoll, u->timestamp);
         } else
@@ -330,6 +376,22 @@ static void thread_func(void *userdata) {
 
         if (ret == 0)
             goto finish;
+
+        if (PA_SINK_IS_OPENED(u->sink->thread_info.state)) {
+            struct pollfd *pollfd;
+            if (u->rtpoll_item) {
+                pollfd = pa_rtpoll_item_get_pollfd(u->rtpoll_item, NULL);
+                revents = pollfd->revents;
+                if (revents & ~POLLOUT) {
+                    pa_log_debug("Poll error 0x%x occured, try recover.", revents);
+                    pa_hal_manager_pcm_recover(u->hal_manager, u->pcm_handle, revents);
+                    u->first = true;
+                    revents = 0;
+                } else {
+                    //pa_log_debug("Poll wakeup.", revents);
+                }
+            }
+        }
     }
 
 fail:
@@ -345,8 +407,9 @@ finish:
 int pa__init(pa_module*m) {
     struct userdata *u = NULL;
     pa_sample_spec ss;
+    pa_sample_spec *pss;
     pa_channel_map map;
-    uint32_t nfrags, frag_size;
+    uint32_t nfrags = 0, frag_size = 0;
     pa_modargs *ma = NULL;
     pa_sink_new_data data;
     size_t nbytes;
@@ -365,16 +428,11 @@ int pa__init(pa_module*m) {
         pa_log("Invalid sample format specification or channel map");
         goto fail;
     }
+    pss = &ss;
 
     alternate_sample_rate = m->core->alternate_sample_rate;
     if (pa_modargs_get_alternate_sample_rate(ma, &alternate_sample_rate) < 0) {
         pa_log("Failed to parse alternate sample rate");
-        goto fail;
-    }
-
-    if (pa_modargs_get_value_u32(ma, "fragments", &nfrags) < 0 ||
-        pa_modargs_get_value_u32(ma, "fragment_size", &frag_size) < 0) {
-        pa_log("Failed to parse buffer metrics");
         goto fail;
     }
 
@@ -385,6 +443,13 @@ int pa__init(pa_module*m) {
     u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
     u->rtpoll = pa_rtpoll_new();
     pa_thread_mq_init(&u->thread_mq, m->core->mainloop, u->rtpoll);
+
+    pa_modargs_get_value_u32(ma, "fragment_size", &frag_size);
+    pa_modargs_get_value_u32(ma, "fragments", &nfrags);
+    if (frag_size == 0 || nfrags == 0) {
+        /* Get fragment_size, fragments from HAL */
+        pa_hal_manager_pcm_get_params(u->hal_manager, NULL, AUDIO_DIRECTION_IN, (void **)&pss, &frag_size, &nfrags);
+    }
 
     pa_sink_new_data_init(&data);
     data.driver = __FILE__;
@@ -420,7 +485,9 @@ int pa__init(pa_module*m) {
 
     unsuspend (u);
 
-    u->block_usec = BLOCK_USEC;
+    u->block_usec = pa_bytes_to_usec(frag_size * nfrags, &ss);
+    if (u->block_usec < BLOCK_USEC)
+        u->block_usec = BLOCK_USEC;
 
     nbytes = pa_usec_to_bytes(u->block_usec, &u->sink->sample_spec);
     pa_sink_set_max_rewind(u->sink, 0);

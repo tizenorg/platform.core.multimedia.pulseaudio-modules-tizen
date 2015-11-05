@@ -75,6 +75,10 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
         h->intf.pcm_avail = dlsym(h->dl_handle, "audio_pcm_avail");
         h->intf.pcm_write = dlsym(h->dl_handle, "audio_pcm_write");
         h->intf.pcm_read = dlsym(h->dl_handle, "audio_pcm_read");
+        h->intf.pcm_get_fd = dlsym(h->dl_handle, "audio_pcm_get_fd");
+        h->intf.pcm_recover = dlsym(h->dl_handle, "audio_pcm_recover");
+        h->intf.pcm_get_params = dlsym(h->dl_handle, "audio_pcm_get_params");
+        h->intf.pcm_set_params = dlsym(h->dl_handle, "audio_pcm_set_params");
         if (h->intf.init) {
             /* TODO : no need to pass platform_data as second param. need to fix hal. */
             if (h->intf.init(&h->data, user_data) != AUDIO_RET_OK) {
@@ -407,6 +411,65 @@ int32_t pa_hal_manager_pcm_read(pa_hal_manager *h, pcm_handle pcm_h, void *buffe
 
     if (AUDIO_IS_ERROR(hal_ret = h->intf.pcm_read(h->data, pcm_h, buffer, frames))) {
         pa_log_error("pcm_read returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+    return ret;
+}
+
+int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(pcm_h);
+    pa_assert(fd);
+
+    if (AUDIO_IS_ERROR(hal_ret = h->intf.pcm_get_fd(h->data, pcm_h, fd))) {
+        pa_log_error("pcm_get_fd returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+    return ret;
+}
+
+int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(pcm_h);
+
+    if (AUDIO_IS_ERROR(hal_ret = h->intf.pcm_recover(h->data, pcm_h, err))) {
+        pa_log_error("pcm_recover returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+    return ret;
+}
+
+int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *frag_size, uint32_t *nfrags) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(*sample_spec);
+    pa_assert(frag_size);
+    pa_assert(nfrags);
+
+    if (AUDIO_IS_ERROR(hal_ret = h->intf.pcm_get_params(h->data, pcm_h, direction, sample_spec, frag_size, nfrags))) {
+        pa_log_error("pcm_get_params returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+    return ret;
+}
+
+int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t frag_size, uint32_t nfrags) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(sample_spec);
+
+    if (AUDIO_IS_ERROR(hal_ret = h->intf.pcm_set_params(h->data, pcm_h, direction, sample_spec, frag_size, nfrags))) {
+        pa_log_error("pcm_set_params returns error:0x%x", hal_ret);
         ret = -1;
     }
     return ret;

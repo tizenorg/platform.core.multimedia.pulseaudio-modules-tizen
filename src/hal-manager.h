@@ -56,12 +56,16 @@ int32_t pa_hal_manager_do_route(pa_hal_manager *h, hal_route_info *info);
 int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *option);
 int32_t pa_hal_manager_update_stream_connection_info(pa_hal_manager *h, hal_stream_connection_info *info);
 int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, hal_stream_info *info, uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
-int32_t pa_hal_manager_pcm_open(pa_hal_manager *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec);
+int32_t pa_hal_manager_pcm_open(pa_hal_manager *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec, uint32_t period_size, uint32_t periods);
 int32_t pa_hal_manager_pcm_start(pa_hal_manager *h, pcm_handle pcm_h);
 int32_t pa_hal_manager_pcm_stop(pa_hal_manager *h, pcm_handle pcm_h);
 int32_t pa_hal_manager_pcm_close(pa_hal_manager *h, pcm_handle pcm_h);
 int32_t pa_hal_manager_pcm_available(pa_hal_manager *h, pcm_handle pcm_h, uint32_t *available);
 int32_t pa_hal_manager_pcm_write(pa_hal_manager *h, pcm_handle pcm_h, const void *buffer, uint32_t frames);
 int32_t pa_hal_manager_pcm_read(pa_hal_manager *h, pcm_handle pcm_h, void *buffer, uint32_t frames);
+int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd);
+int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err);
+int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
+int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
 
 #endif

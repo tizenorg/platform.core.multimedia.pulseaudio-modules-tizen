@@ -205,7 +205,7 @@ int32_t pa_hal_manager_get_volume_value(pa_hal_manager *h, const char *volume_ty
     return ret;
 }
 
-int32_t pa_hal_manager_get_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute) {
+int32_t pa_hal_manager_get_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -224,7 +224,7 @@ int32_t pa_hal_manager_get_mute(pa_hal_manager *h, const char *volume_type, io_d
     return ret;
 }
 
-int32_t pa_hal_manager_set_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute) {
+int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};

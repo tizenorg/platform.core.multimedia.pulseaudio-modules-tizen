@@ -20,11 +20,11 @@ typedef enum _focus_acquired_status {
     STREAM_FOCUS_ACQUIRED_CAPTURE  = 0x02,
 } focus_acquired_status_t;
 
-enum stream_direction {
-    STREAM_DIRECTION_IN,
+typedef enum _stream_direction {
     STREAM_DIRECTION_OUT,
+    STREAM_DIRECTION_IN,
     STREAM_DIRECTION_MAX,
-};
+} stream_direction_t;
 
 #define GET_STREAM_NEW_SAMPLE_SPEC(stream, type) \
       (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->sample_spec : ((pa_source_output_new_data*)stream)->sample_spec)

@@ -26,6 +26,8 @@
 #include "communicator.h"
 #include <pulsecore/shared.h>
 
+#define SHARED_COMMUNICATOR "tizen-communicator"
+
 struct _pa_communicator {
     PA_REFCNT_DECLARE;
 
@@ -39,7 +41,7 @@ pa_communicator* pa_communicator_get(pa_core *core) {
 
     pa_assert(core);
 
-    if ((c = pa_shared_get(core, "communicator")))
+    if ((c = pa_shared_get(core, SHARED_COMMUNICATOR)))
         return pa_communicator_ref(c);
 
     c = pa_xnew0(pa_communicator, 1);
@@ -49,7 +51,7 @@ pa_communicator* pa_communicator_get(pa_core *core) {
     for (i = 0; i < PA_COMMUNICATOR_HOOK_MAX; i++)
         pa_hook_init(&c->hooks[i], c);
 
-    pa_shared_set(core, "communicator", c);
+    pa_shared_set(core, SHARED_COMMUNICATOR, c);
 
     return c;
 }
@@ -76,7 +78,7 @@ void pa_communicator_unref(pa_communicator *c) {
         pa_hook_done(&c->hooks[i]);
 
     if (c->core)
-        pa_shared_remove(c->core, "communicator");
+        pa_shared_remove(c->core, SHARED_COMMUNICATOR);
 
     pa_xfree(c);
 }

@@ -44,7 +44,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
 
     pa_assert(core);
 
-    if ((h = pa_shared_get(core, "hal-manager")))
+    if ((h = pa_shared_get(core, "tizen-hal-manager")))
         return pa_hal_manager_ref(h);
 
     h = pa_xnew0(pa_hal_manager, 1);
@@ -82,6 +82,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
             }
         }
 
+        /* It'll be deprecated soon */
         pa_shared_set(core, "tizen-audio-data", h->data);
         pa_shared_set(core, "tizen-audio-interface", &h->intf);
 
@@ -90,7 +91,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
          return NULL;
      }
 
-    pa_shared_set(core, "hal-manager", h);
+    pa_shared_set(core, "tizen-hal-manager", h);
 
     return h;
 }

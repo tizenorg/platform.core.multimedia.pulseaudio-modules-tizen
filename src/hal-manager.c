@@ -27,6 +27,8 @@
 #include "tizen-audio.h"
 #include <pulsecore/shared.h>
 
+#define SHARED_MEM_HAL_MANAGER "tizen-hal-manager"
+
 /* Audio HAL library */
 #define LIB_TIZEN_AUDIO "libtizen-audio.so"
 
@@ -44,7 +46,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
 
     pa_assert(core);
 
-    if ((h = pa_shared_get(core, "hal-manager")))
+    if ((h = pa_shared_get(core, SHARED_MEM_HAL_MANAGER)))
         return pa_hal_manager_ref(h);
 
     h = pa_xnew0(pa_hal_manager, 1);
@@ -82,6 +84,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
             }
         }
 
+        /* It'll be deprecated soon */
         pa_shared_set(core, "tizen-audio-data", h->data);
         pa_shared_set(core, "tizen-audio-interface", &h->intf);
 
@@ -90,7 +93,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
          return NULL;
      }
 
-    pa_shared_set(core, "hal-manager", h);
+    pa_shared_set(core, SHARED_MEM_HAL_MANAGER, h);
 
     return h;
 }
@@ -122,7 +125,7 @@ void pa_hal_manager_unref(pa_hal_manager *h) {
     }
 
     if (h->core)
-        pa_shared_remove(h->core, "hal-manager");
+        pa_shared_remove(h->core, SHARED_MEM_HAL_MANAGER);
 
     pa_xfree(h);
 }

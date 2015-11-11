@@ -16,6 +16,7 @@
 #include <pulsecore/strbuf.h>
 #include <pulsecore/modargs.h>
 #include <pulsecore/namereg.h>
+#include <pulsecore/shared.h>
 
 #include <vconf.h>
 #include <vconf-keys.h>
@@ -27,6 +28,8 @@
 
 #include "communicator.h"
 #include "device-manager.h"
+
+#define SHARED_MEM_DEVICE_MANAGER "tizen-device-manager"
 
 #define DEVICE_MAP_FILE                    "/etc/pulse/device-map.json"
 #define DEVICE_PROFILE_MAX                  2
@@ -342,6 +345,7 @@ struct device_file_map {
 };
 
 struct pa_device_manager {
+    PA_REFCNT_DECLARE;
     pa_core *core;
     pa_hook_slot *sink_put_hook_slot, *sink_state_changed_slot, *sink_unlink_hook_slot;
     pa_hook_slot *source_put_hook_slot, *source_state_changed_slot, *source_unlink_hook_slot;
@@ -4345,12 +4349,16 @@ failed:
     return -1;
 }
 
-pa_device_manager* pa_device_manager_init(pa_core *c) {
+pa_device_manager* pa_device_manager_get(pa_core *c) {
     pa_device_manager *dm;
 
-    pa_log_debug("pa_device_manager_init start");
+    pa_assert(c);
+
+    if ((dm = pa_shared_get(c, SHARED_MEM_DEVICE_MANAGER)))
+        return pa_device_manager_ref(dm);
 
     dm = pa_xnew0(pa_device_manager, 1);
+    PA_REFCNT_INIT(dm);
     dm->core = c;
     dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_DISCONNECTED;
 
@@ -4397,17 +4405,26 @@ pa_device_manager* pa_device_manager_init(pa_core *c) {
         pa_log_warn("Set default source with mic(normal) failed");
     }
 
-    pa_log_debug("pa_device_manager_init end");
+    pa_shared_set(c, SHARED_MEM_DEVICE_MANAGER, dm);
 
     return dm;
 }
 
-void pa_device_manager_done(pa_device_manager *dm) {
+pa_device_manager* pa_device_manager_ref(pa_device_manager *dm) {
+    pa_assert(dm);
+    pa_assert(PA_REFCNT_VALUE(dm) > 0);
 
-    if (!dm)
+    PA_REFCNT_INC(dm);
+
+    return dm;
+}
+
+void pa_device_manager_unref(pa_device_manager *dm) {
+    pa_assert(dm);
+    pa_assert(PA_REFCNT_VALUE(dm) > 0);
+
+    if (PA_REFCNT_DEC(dm) > 0)
         return;
-
-    pa_log_debug("pa_device_manager_done start");
 
     if (dm->sink_put_hook_slot)
         pa_hook_slot_free(dm->sink_put_hook_slot);
@@ -4441,5 +4458,8 @@ void pa_device_manager_done(pa_device_manager *dm) {
 
     dbus_deinit(dm);
 
-    pa_log_debug("pa_device_manager_done end");
+    if (dm->core)
+        pa_shared_remove(dm->core, SHARED_MEM_DEVICE_MANAGER);
+
+    pa_xfree(dm);
 }

@@ -57,8 +57,9 @@ typedef struct _hook_call_data_for_info_changed {
     dm_device *device;
 } pa_device_manager_hook_data_for_info_changed;
 
-pa_device_manager* pa_device_manager_init(pa_core* core);
-void pa_device_manager_done(pa_device_manager *dm);
+pa_device_manager* pa_device_manager_get(pa_core* c);
+pa_device_manager* pa_device_manager_ref(pa_device_manager *dm);
+void pa_device_manager_unref(pa_device_manager *dm);
 
 /* get device or list */
 pa_idxset* pa_device_manager_get_device_list(pa_device_manager *dm);

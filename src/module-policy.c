@@ -1779,7 +1779,7 @@ int pa__init(pa_module *m)
     }
     u->stream_manager = pa_stream_manager_init(u->core);
 
-    u->device_manager = pa_device_manager_init(u->core);
+    u->device_manager = pa_device_manager_get(u->core);
 
     /* load null sink/source */
     args = pa_sprintf_malloc("sink_name=%s", SINK_NULL);
@@ -1829,7 +1829,7 @@ void pa__done(pa_module *m)
     dbus_deinit(u);
 #endif
     if (u->device_manager)
-        pa_device_manager_done(u->device_manager);
+        pa_device_manager_unref(u->device_manager);
 
     if (u->stream_manager)
         pa_stream_manager_done(u->stream_manager);

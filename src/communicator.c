@@ -39,7 +39,7 @@ pa_communicator* pa_communicator_get(pa_core *core) {
 
     pa_assert(core);
 
-    if ((c = pa_shared_get(core, "communicator")))
+    if ((c = pa_shared_get(core, "tizen-communicator")))
         return pa_communicator_ref(c);
 
     c = pa_xnew0(pa_communicator, 1);
@@ -49,7 +49,7 @@ pa_communicator* pa_communicator_get(pa_core *core) {
     for (i = 0; i < PA_COMMUNICATOR_HOOK_MAX; i++)
         pa_hook_init(&c->hooks[i], c);
 
-    pa_shared_set(core, "communicator", c);
+    pa_shared_set(core, "tizen-communicator", c);
 
     return c;
 }
@@ -76,7 +76,7 @@ void pa_communicator_unref(pa_communicator *c) {
         pa_hook_done(&c->hooks[i]);
 
     if (c->core)
-        pa_shared_remove(c->core, "communicator");
+        pa_shared_remove(c->core, "tizen-communicator");
 
     pa_xfree(c);
 }

@@ -382,7 +382,7 @@ int pa__init(pa_module*m) {
     u->core = m->core;
     u->module = m;
     u->first = true;
-    u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
+    u->hal_manager = pa_hal_manager_get(u->core);
     u->rtpoll = pa_rtpoll_new();
     pa_thread_mq_init(&u->thread_mq, m->core->mainloop, u->rtpoll);
 

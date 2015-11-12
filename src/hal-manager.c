@@ -76,10 +76,8 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core) {
         h->intf.pcm_write = dlsym(h->dl_handle, "audio_pcm_write");
         h->intf.pcm_read = dlsym(h->dl_handle, "audio_pcm_read");
         if (h->intf.init) {
-            /* TODO : no need to pass platform_data as second param. need to fix hal. */
-            if (h->intf.init(&h->data) != AUDIO_RET_OK) {
+            if (h->intf.init(&h->data) != AUDIO_RET_OK)
                 pa_log_error("hal_manager init failed");
-            }
         }
 
      } else {

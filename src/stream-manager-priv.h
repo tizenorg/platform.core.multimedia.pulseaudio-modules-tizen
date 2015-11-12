@@ -64,6 +64,7 @@ typedef struct _prior_max_priority_stream {
 struct _stream_manager {
     pa_core *core;
     pa_hal_manager *hal;
+    pa_device_manager *dm;
     pa_hashmap *volume_infos;
     pa_hashmap *volume_modifiers;
     pa_hashmap *stream_infos;
@@ -91,7 +92,6 @@ struct _stream_manager {
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
-        pa_hook_slot *comm_hook_need_update_route_slot;
     } comm;
 };
 

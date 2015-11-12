@@ -43,7 +43,7 @@ typedef struct _hal_stream_info {
 
 typedef void* pcm_handle;
 
-pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data);
+pa_hal_manager* pa_hal_manager_get(pa_core *core);
 pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h);
 void pa_hal_manager_unref(pa_hal_manager *h);
 int32_t pa_hal_manager_get_volume_level_max(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level);

@@ -883,12 +883,12 @@ static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manage
     return PA_HOOK_OK;
 }
 
+#if 0
 #define MAX_CACHED_LEN 128
 typedef struct _cached_device_list {
     const char *device_type;
     int count;
 } cached_device_list;
-
 static void update_sink_or_source_as_device_connection_change(stream_route_type_t stream_route_type, stream_type_t stream_type, pa_idxset *streams, dm_device *device, pa_bool_t is_connected, struct userdata *u) {
     void *s = NULL;
     uint32_t s_idx = 0;
@@ -1113,7 +1113,7 @@ static void update_sink_or_source_as_device_connection_change(stream_route_type_
 
     return;
 }
-
+#endif
 /* Reorganize routing when a device has been connected or disconnected */
 static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_manager_hook_data_for_conn_changed *conn, struct userdata *u) {
     uint32_t idx = 0;
@@ -1193,6 +1193,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                     pa_log_error("[CONN] could not get combine_sink_ex");
             }
         }
+#if 0 /* move to stream-manager */
         if (device_direction & DM_DEVICE_DIRECTION_IN) {
             if ((source = pa_device_manager_get_source(conn->device, DEVICE_ROLE_NORMAL)))
                 update_sink_or_source_as_device_connection_change(STREAM_ROUTE_TYPE_MANUAL_EXT, STREAM_SOURCE_OUTPUT, source->outputs, conn->device, conn->is_connected, u);
@@ -1209,14 +1210,16 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
 
             update_sink_or_source_as_device_connection_change(STREAM_ROUTE_TYPE_AUTO, STREAM_SINK_INPUT, u->core->sink_inputs, conn->device, conn->is_connected, u);
         }
-
-    } else {
+#endif
+    } //else {
+#if 0 /* move to stream-manager */
        /* INTERNAL AUDIO CODEC */
        if (conn->is_connected && (device_direction & DM_DEVICE_DIRECTION_IN))
            update_sink_or_source_as_device_connection_change(STREAM_ROUTE_TYPE_AUTO, STREAM_SOURCE_OUTPUT, u->core->source_outputs, conn->device, conn->is_connected, u);
        if (conn->is_connected && (device_direction & DM_DEVICE_DIRECTION_OUT))
            update_sink_or_source_as_device_connection_change(STREAM_ROUTE_TYPE_AUTO, STREAM_SINK_INPUT, u->core->sink_inputs, conn->device, conn->is_connected, u);
     }
+#endif
 
     return PA_HOOK_OK;
 }
@@ -1760,7 +1763,7 @@ int pa__init(pa_module *m)
     u->test_property1 = 123;
 #endif
 
-    u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
+    u->hal_manager = pa_hal_manager_get(u->core);
 
     u->communicator.comm = pa_communicator_get(u->core);
     if (u->communicator.comm) {
@@ -1777,9 +1780,9 @@ int pa__init(pa_module *m)
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED),
                 PA_HOOK_EARLY, (pa_hook_cb_t)device_connection_changed_hook_cb, u);
     }
-    u->stream_manager = pa_stream_manager_init(u->core);
-
     u->device_manager = pa_device_manager_get(u->core);
+
+    u->stream_manager = pa_stream_manager_init(u->core);
 
     /* load null sink/source */
     args = pa_sprintf_malloc("sink_name=%s", SINK_NULL);

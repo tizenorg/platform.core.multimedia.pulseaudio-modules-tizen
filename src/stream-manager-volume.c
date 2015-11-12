@@ -476,19 +476,20 @@ int32_t set_volume_level_by_idx(pa_stream_manager *m, stream_type_t stream_type,
     return 0;
 }
 
-int32_t set_volume_level_with_new_data(pa_stream_manager *m, stream_type_t stream_type, void *nd, uint32_t volume_level) {
+int32_t set_volume_level_with_new_data(pa_stream_manager *m, void *stream, stream_type_t stream_type, uint32_t volume_level) {
     pa_bool_t is_hal_volume = FALSE;
     pa_cvolume cv;
     double volume_linear = 1.0;
     const char *volume_type_str = NULL;
     const char *modifier_gain = NULL;
     pa_assert(m);
+    pa_assert(stream);
 
-    if ((volume_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(nd, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
+    if ((volume_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
         /* Get modifier for gain */
-        modifier_gain = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(nd, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
+        modifier_gain = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
     } else {
-        pa_log_debug("new_data[%p] doesn't have volume type", nd);
+        pa_log_debug("new_data[%p] doesn't have volume type", stream);
         return -1;
     }
 
@@ -512,11 +513,11 @@ int32_t set_volume_level_with_new_data(pa_stream_manager *m, stream_type_t strea
                     modifier_gain, *modifier_gain_value, volume_linear);
             }
         }
-        pa_cvolume_set(&cv, GET_STREAM_NEW_SAMPLE_SPEC(nd, stream_type).channels, pa_sw_volume_from_linear(volume_linear));
+        pa_cvolume_set(&cv, GET_STREAM_NEW_SAMPLE_SPEC(stream, stream_type).channels, pa_sw_volume_from_linear(volume_linear));
         if (stream_type == STREAM_SINK_INPUT)
-            pa_sink_input_new_data_set_volume((pa_sink_input_new_data*)nd, &cv, TRUE);
+            pa_sink_input_new_data_set_volume((pa_sink_input_new_data*)stream, &cv, TRUE);
         else if (stream_type == STREAM_SOURCE_OUTPUT)
-            pa_source_output_new_data_set_volume((pa_source_output_new_data*)nd, &cv, TRUE);
+            pa_source_output_new_data_set_volume((pa_source_output_new_data*)stream, &cv, TRUE);
     }
     pa_log_debug("set_volume_level_with_new_data() : stream_type[%d], volume_type[%s], level[%u], value[%f]",
             stream_type, volume_type_str, volume_level, volume_linear);
@@ -606,7 +607,7 @@ int32_t get_volume_mute_by_type(pa_stream_manager *m, stream_type_t stream_type,
     return 0;
 }
 
-int32_t set_volume_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, uint32_t stream_idx, pa_bool_t volume_mute) {
+int32_t set_volume_mute_by_idx(pa_stream_manager *m, uint32_t stream_idx, stream_type_t stream_type, pa_bool_t volume_mute) {
     void *s = NULL;
     uint32_t idx = 0;
     const char *volume_type_str = NULL;
@@ -615,7 +616,7 @@ int32_t set_volume_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, 
     pa_bool_t muted_by_type = FALSE;
     pa_assert(m);
 
-    pa_log_info("set_volume_mute_by_idx, stream_type:%d stream_idx:%u mute:%d", stream_type, stream_idx, volume_mute);
+    pa_log_info("set_volume_mute_by_idx, stream_idx:%u stream_type:%d mute:%d", stream_idx, stream_type, volume_mute);
 
     if (stream_idx != (uint32_t)-1) {
         if ((s = pa_idxset_get_by_index((stream_type==STREAM_SINK_INPUT)?m->core->sink_inputs:m->core->source_outputs, stream_idx))) {
@@ -658,7 +659,7 @@ int32_t set_volume_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, 
     return 0;
 }
 
-int32_t get_volume_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, uint32_t stream_idx, pa_bool_t *volume_mute) {
+int32_t get_volume_mute_by_idx(pa_stream_manager *m, uint32_t stream_idx, stream_type_t stream_type, pa_bool_t *volume_mute) {
     int32_t ret = 0;
     void *s = NULL;
     uint32_t idx = 0;
@@ -678,22 +679,23 @@ int32_t get_volume_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, 
     if (!s)
         ret = -1;
 
-    pa_log_info("get_volume_mute_by_idx, stream_type:%d stream_idx:%u mute:%d, ret:%d", stream_type, stream_idx, *volume_mute, ret);
+    pa_log_info("get_volume_mute_by_idx, stream_idx:%u stream_type:%d mute:%d, ret:%d", stream_idx, stream_type, *volume_mute, ret);
 
     return ret;
 }
 
-int32_t set_volume_mute_with_new_data(pa_stream_manager *m, stream_type_t stream_type, void *nd, pa_bool_t volume_mute) {
+int32_t set_volume_mute_with_new_data(pa_stream_manager *m, void *stream, stream_type_t stream_type, pa_bool_t volume_mute) {
     pa_bool_t is_hal_volume = FALSE;
     const char *volume_type_str = NULL;
     pa_assert(m);
+    pa_assert(stream);
 
     pa_log_info("set_volume_mute_with_new_data, stream_type:%d mute:%d", stream_type, volume_mute);
 
-    if ((volume_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(nd, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
+    if ((volume_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
         /* do nothing */
     } else {
-        pa_log_debug("new_data[%p] doesn't have volume type", nd);
+        pa_log_debug("new_data[%p] doesn't have volume type", stream);
         return -1;
     }
 
@@ -708,9 +710,9 @@ int32_t set_volume_mute_with_new_data(pa_stream_manager *m, stream_type_t stream
             return -1;
 
     if (stream_type == STREAM_SINK_INPUT)
-        pa_sink_input_new_data_set_muted((pa_sink_input_new_data*)nd, volume_mute);
+        pa_sink_input_new_data_set_muted((pa_sink_input_new_data*)stream, volume_mute);
     else if (stream_type == STREAM_SOURCE_OUTPUT)
-        pa_source_output_new_data_set_muted((pa_source_output_new_data*)nd, volume_mute);
+        pa_source_output_new_data_set_muted((pa_source_output_new_data*)stream, volume_mute);
 
     return 0;
 }
@@ -865,10 +867,10 @@ int32_t pa_stream_manager_volume_set_mute(pa_stream_manager *m, stream_type_t st
     return set_volume_mute_by_type(m, stream_type, volume_type, volume_mute);
 }
 
-int32_t pa_stream_manager_volume_get_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, uint32_t stream_idx, pa_bool_t *volume_mute) {
-    return get_volume_mute_by_idx(m, stream_type, stream_idx, volume_mute);
+int32_t pa_stream_manager_volume_get_mute_by_idx(pa_stream_manager *m, uint32_t stream_idx, stream_type_t stream_type, pa_bool_t *volume_mute) {
+    return get_volume_mute_by_idx(m, stream_idx, stream_type, volume_mute);
 }
 
-int32_t pa_stream_manager_volume_set_mute_by_idx(pa_stream_manager *m, stream_type_t stream_type, uint32_t stream_idx, pa_bool_t volume_mute) {
-    return set_volume_mute_by_idx(m, stream_type, stream_idx, volume_mute);
+int32_t pa_stream_manager_volume_set_mute_by_idx(pa_stream_manager *m, uint32_t stream_idx, stream_type_t stream_type, pa_bool_t volume_mute) {
+    return set_volume_mute_by_idx(m, stream_idx, stream_type, volume_mute);
 }

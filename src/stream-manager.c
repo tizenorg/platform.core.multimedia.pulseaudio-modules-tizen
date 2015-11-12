@@ -2081,13 +2081,6 @@ static process_stream_result_t process_stream(pa_stream_manager *m, stream_type_
             result = PROCESS_STREAM_RESULT_STOP;
             goto FAILURE;
         }
-        /* update the volume type of this stream */
-        ret = update_volume_type_of_stream(m, type, stream, role);
-        if (ret == FALSE) {
-            pa_log_error("could not update the volume type of '%s' role.", role);
-            result = PROCESS_STREAM_RESULT_STOP;
-            goto FAILURE;
-        }
         /* update the route type of this stream */
         ret = update_route_type_of_stream(m, stream, type, role);
         if (ret == FALSE) {
@@ -2095,6 +2088,10 @@ static process_stream_result_t process_stream(pa_stream_manager *m, stream_type_
             result = PROCESS_STREAM_RESULT_STOP;
             goto FAILURE;
         }
+        /* update the volume type of this stream */
+        ret = update_volume_type_of_stream(m, type, stream, role);
+        if (ret == FALSE)
+            pa_log_warn("could not update the volume type of '%s' role.", role);
 
         /* skip route types */
         if ((route_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE))) {

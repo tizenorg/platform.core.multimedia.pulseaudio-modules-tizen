@@ -14,6 +14,10 @@
 #define GET_STREAM_PROPLIST(stream, type) \
       (type == STREAM_SINK_INPUT? ((pa_sink_input*)stream)->proplist : ((pa_source_output*)stream)->proplist)
 
+#define SINK_NAME_COMBINED            "sink_combined"
+#define SINK_NAME_NULL                "sink_null"
+#define SOURCE_NAME_NULL              "source_null"
+
 typedef struct _stream_manager pa_stream_manager;
 
 typedef enum _stream_type {
@@ -61,15 +65,7 @@ typedef struct _hook_call_data_for_option {
     int32_t value;
 } pa_stream_manager_hook_data_for_option;
 
-typedef struct _hook_call_data_for_update_route {
-    void *stream;
-    stream_type_t stream_type;
-    pa_bool_t is_device_connected;
-    pa_bool_t use_internal_codec;
-} pa_stream_manager_hook_data_for_update_route;
-
 int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
-void pa_stream_manager_is_current_highest_priority(void *stream, stream_type_t stream_type, pa_bool_t *highest_priority, pa_stream_manager *m);
 void pa_stream_manager_is_available_device_for_auto_route(const char *cur_device_type, const char *new_device_type, const char *role, stream_type_t stream_type, pa_bool_t *available, pa_stream_manager *m);
 void pa_stream_manager_find_next_priority_device_for_auto_route(const char *cur_device_type, const char *role, stream_type_t stream_type, char **next_device_type, pa_stream_manager *m);
 

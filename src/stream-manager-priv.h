@@ -26,6 +26,9 @@ typedef enum _stream_direction {
     STREAM_DIRECTION_MAX,
 } stream_direction_t;
 
+#define GET_STREAM_NEW_SAMPLE_SPEC_PTR(stream, type) \
+      (type == STREAM_SINK_INPUT? &(((pa_sink_input_new_data*)stream)->sample_spec) : &(((pa_source_output_new_data*)stream)->sample_spec))
+
 #define GET_STREAM_NEW_SAMPLE_SPEC(stream, type) \
       (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->sample_spec : ((pa_source_output_new_data*)stream)->sample_spec)
 
@@ -34,7 +37,6 @@ typedef enum _stream_direction {
 
 #define IS_FOCUS_ACQUIRED(focus, type) \
       (type == STREAM_SINK_INPUT? (focus & STREAM_FOCUS_ACQUIRED_PLAYBACK) : (focus & STREAM_FOCUS_ACQUIRED_CAPTURE))
-
 
 typedef struct _stream_info {
     int32_t priority;
@@ -64,6 +66,7 @@ typedef struct _prior_max_priority_stream {
 struct _stream_manager {
     pa_core *core;
     pa_hal_manager *hal;
+    pa_device_manager *dm;
     pa_hashmap *volume_infos;
     pa_hashmap *volume_modifiers;
     pa_hashmap *stream_infos;
@@ -91,7 +94,6 @@ struct _stream_manager {
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
-        pa_hook_slot *comm_hook_need_update_route_slot;
     } comm;
 };
 

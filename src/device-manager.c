@@ -7,7 +7,6 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <json.h>
-#include <libudev.h>
 #include <pulse/proplist.h>
 #include <pulse/util.h>
 #include <pulsecore/core-subscribe.h>

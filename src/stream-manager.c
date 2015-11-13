@@ -2857,7 +2857,7 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m = pa_xnew0(pa_stream_manager, 1);
     m->core = c;
 
-    m->hal = pa_hal_manager_get(c, NULL);
+    m->hal = pa_hal_manager_get(c);
 
 #ifdef HAVE_DBUS
 #ifdef USE_DBUS_PROTOCOL

@@ -41,7 +41,7 @@ struct _pa_hal_manager {
     audio_interface_t intf;
 };
 
-pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
+pa_hal_manager* pa_hal_manager_get(pa_core *core) {
     pa_hal_manager *h;
 
     pa_assert(core);
@@ -68,8 +68,6 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
         h->intf.update_route_option = dlsym(h->dl_handle, "audio_update_route_option");
         h->intf.update_stream_connection_info  = dlsym(h->dl_handle, "audio_update_stream_connection_info");
         h->intf.get_buffer_attr = dlsym(h->dl_handle, "audio_get_buffer_attr");
-        h->intf.alsa_pcm_open = dlsym(h->dl_handle, "audio_alsa_pcm_open");
-        h->intf.alsa_pcm_close = dlsym(h->dl_handle, "audio_alsa_pcm_close");
         h->intf.pcm_open = dlsym(h->dl_handle, "audio_pcm_open");
         h->intf.pcm_start = dlsym(h->dl_handle, "audio_pcm_start");
         h->intf.pcm_stop = dlsym(h->dl_handle, "audio_pcm_stop");
@@ -79,7 +77,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core, void *user_data) {
         h->intf.pcm_read = dlsym(h->dl_handle, "audio_pcm_read");
         if (h->intf.init) {
             /* TODO : no need to pass platform_data as second param. need to fix hal. */
-            if (h->intf.init(&h->data, user_data) != AUDIO_RET_OK) {
+            if (h->intf.init(&h->data) != AUDIO_RET_OK) {
                 pa_log_error("hal_manager init failed");
             }
         }

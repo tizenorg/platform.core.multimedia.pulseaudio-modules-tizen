@@ -1760,7 +1760,7 @@ int pa__init(pa_module *m)
     u->test_property1 = 123;
 #endif
 
-    u->hal_manager = pa_hal_manager_get(u->core, (void *)u);
+    u->hal_manager = pa_hal_manager_get(u->core);
 
     u->communicator.comm = pa_communicator_get(u->core);
     if (u->communicator.comm) {

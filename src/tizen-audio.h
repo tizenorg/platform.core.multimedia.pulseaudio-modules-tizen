@@ -70,7 +70,7 @@ typedef struct audio_stream_info {
 
 /* Overall */
 typedef struct audio_interface {
-    audio_return_t (*init)(void **userdata, void *platform_data);
+    audio_return_t (*init)(void **userdata);
     audio_return_t (*deinit)(void **userdata);
     audio_return_t (*get_volume_level_max)(void *userdata, audio_volume_info_t *info, uint32_t *level);
     audio_return_t (*get_volume_level)(void *userdata, audio_volume_info_t *info, uint32_t *level);
@@ -84,8 +84,6 @@ typedef struct audio_interface {
     audio_return_t (*get_buffer_attr)(void *userdata, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                       uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
     /* Interface of PCM device */
-    audio_return_t (*alsa_pcm_open)(void *userdata, void **pcm_handle, char *device_name, uint32_t direction, int mode);
-    audio_return_t (*alsa_pcm_close)(void *userdata, void *pcm_handle);
     audio_return_t (*pcm_open)(void *userdata, void **pcm_handle, void *sample_spec, uint32_t direction);
     audio_return_t (*pcm_start)(void *userdata, void *pcm_handle);
     audio_return_t (*pcm_stop)(void *userdata, void *pcm_handle);
@@ -95,7 +93,7 @@ typedef struct audio_interface {
     audio_return_t (*pcm_read)(void *userdata, void *pcm_handle, void *buffer, uint32_t frames);
 } audio_interface_t;
 
-audio_return_t audio_init(void **userdata, void *platform_data);
+audio_return_t audio_init(void **userdata);
 audio_return_t audio_deinit(void **userdata);
 audio_return_t audio_get_volume_level_max(void *userdata, audio_volume_info_t *info, uint32_t *level);
 audio_return_t audio_get_volume_level(void *userdata, audio_volume_info_t *info, uint32_t *level);
@@ -108,8 +106,6 @@ audio_return_t audio_update_route_option(void *userdata, audio_route_option_t *o
 audio_return_t audio_update_stream_connection_info(void *userdata, audio_stream_info_t *info, uint32_t is_connected);
 audio_return_t audio_get_buffer_attr(void *userdata, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                      uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
-audio_return_t audio_alsa_pcm_open(void *userdata, void **pcm_handle, char *device_name, uint32_t direction, int mode);
-audio_return_t audio_alsa_pcm_close(void *userdata, void *pcm_handle);
 audio_return_t audio_pcm_open(void *userdata, void **pcm_handle, void *sample_spec, uint32_t direction);
 audio_return_t audio_pcm_start(void *userdata, void *pcm_handle);
 audio_return_t audio_pcm_stop(void *userdata, void *pcm_handle);

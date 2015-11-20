@@ -73,6 +73,7 @@ uint32_t pa_device_manager_get_device_id(dm_device *device_item);
 const char* pa_device_manager_get_device_type(dm_device *device_item);
 const char* pa_device_manager_get_device_subtype(dm_device *device_item);
 dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_item);
+pa_usec_t pa_device_manager_get_device_creation_time(dm_device *device_item);
 pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role);
 
 /* set/get device state */

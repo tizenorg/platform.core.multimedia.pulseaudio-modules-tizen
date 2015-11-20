@@ -332,6 +332,10 @@ typedef struct dm_device_profile {
 
     /* device belongs to */
     dm_device *device_item;
+
+    /* creation time */
+    pa_usec_t creation_time;
+
 } dm_device_profile;
 
 /*
@@ -1559,6 +1563,7 @@ static dm_device_profile* create_device_profile(const char *device_profile, dm_d
     profile_item->capture_state = DM_DEVICE_STATE_DEACTIVATED;
     profile_item->playback_devices = playback;
     profile_item->capture_devices = capture;
+    profile_item->creation_time = pa_rtclock_now();
 
     return profile_item;
 }
@@ -4115,6 +4120,15 @@ dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_i
     pa_assert(profile_item = _device_item_get_active_profile(device_item));
 
     return profile_item->direction;
+}
+
+pa_usec_t pa_device_manager_get_device_creation_time(dm_device *device_item) {
+    dm_device_profile *profile_item;
+
+    pa_assert(device_item);
+    pa_assert(profile_item = _device_item_get_active_profile(device_item));
+
+    return profile_item->creation_time;
 }
 
 pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role) {

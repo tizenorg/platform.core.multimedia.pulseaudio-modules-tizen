@@ -26,10 +26,11 @@ typedef enum _stream_type {
 } stream_type_t;
 
 typedef enum stream_route_type {
-    STREAM_ROUTE_TYPE_AUTO,       /* the policy of decision device(s) is automatic and it's routing path is particular to one device */
-    STREAM_ROUTE_TYPE_AUTO_ALL,   /* the policy of decision device(s) is automatic and it's routing path can be several devices */
-    STREAM_ROUTE_TYPE_MANUAL,     /* the policy of decision device(s) is manual */
-    STREAM_ROUTE_TYPE_MANUAL_EXT, /* the policy of decision device(s) is manual and it's routing path is for only external devices */
+    STREAM_ROUTE_TYPE_AUTO,               /* the policy of decision device(s) is automatic and it's routing path is particular to one device based on priority */
+    STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED,/* the policy of decision device(s) is automatic and it's routing path is particular to one device based on connected time */
+    STREAM_ROUTE_TYPE_AUTO_ALL,           /* the policy of decision device(s) is automatic and it's routing path can be several devices */
+    STREAM_ROUTE_TYPE_MANUAL,             /* the policy of decision device(s) is manual */
+    STREAM_ROUTE_TYPE_MANUAL_EXT,         /* the policy of decision device(s) is manual and it's routing path is for only external devices */
 } stream_route_type_t;
 
 typedef struct _hook_call_data_for_select {
@@ -66,8 +67,6 @@ typedef struct _hook_call_data_for_option {
 } pa_stream_manager_hook_data_for_option;
 
 int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
-void pa_stream_manager_is_available_device_for_auto_route(const char *cur_device_type, const char *new_device_type, const char *role, stream_type_t stream_type, pa_bool_t *available, pa_stream_manager *m);
-void pa_stream_manager_find_next_priority_device_for_auto_route(const char *cur_device_type, const char *role, stream_type_t stream_type, char **next_device_type, pa_stream_manager *m);
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c);
 void pa_stream_manager_done(pa_stream_manager* m);

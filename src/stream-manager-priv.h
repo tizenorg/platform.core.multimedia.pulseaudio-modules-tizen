@@ -82,7 +82,9 @@ struct _stream_manager {
         *source_output_new_slot,
         *source_output_put_slot,
         *source_output_unlink_slot,
-        *source_output_state_changed_slot;
+        *source_output_state_changed_slot,
+        *source_output_move_start_slot,
+        *source_output_move_finish_slot;
 #ifdef HAVE_DBUS
 #ifdef USE_DBUS_PROTOCOL
     pa_dbus_protocol *dbus_protocol;

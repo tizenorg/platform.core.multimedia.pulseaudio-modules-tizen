@@ -3196,10 +3196,8 @@ static int handle_device_status_changed(pa_device_manager *dm, const char *devic
     } else if (pa_streq(device_type, DEVICE_TYPE_BT) && device_profile && pa_streq(device_profile, DEVICE_PROFILE_BT_SCO)) {
         if (detected_status == BT_SCO_DISCONNECTED) {
             dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_DISCONNECTED;
-            handle_device_disconnected(dm, device_type, device_profile, identifier);
         } else if (detected_status == BT_SCO_CONNECTED) {
             dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_CONNECTED;
-            handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_BT_SCO);
         } else {
             pa_log_warn("Got invalid bt-sco detected value");
             return -1;
@@ -3533,7 +3531,8 @@ static void notify_device_connection_changed(dm_device *device_item, pa_bool_t c
 static void notify_device_info_changed(dm_device *device_item, dm_device_changed_info_t changed_type, pa_device_manager *dm) {
     pa_device_manager_hook_data_for_info_changed hook_data;
 
-    send_device_info_changed_signal(device_item, changed_type, dm);
+    if (changed_type != DM_DEVICE_CHANGED_INFO_SUBTYPE)
+        send_device_info_changed_signal(device_item, changed_type, dm);
 
     hook_data.changed_info = changed_type;
     hook_data.device = device_item;
@@ -4165,6 +4164,7 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     }
 
     pa_log_debug("bt sco open end");
+    handle_device_connected(dm, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL, NULL, DEVICE_DETECTED_BT_SCO);
 
     if (_device_item_set_active_profile(bt_device, DEVICE_PROFILE_BT_SCO) == NULL) {
         pa_log_error("set bt sco as active profile failed");
@@ -4209,6 +4209,9 @@ int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
         pa_log_error("Failed to bt sco close");
         return -1;
     }
+
+    handle_device_disconnected(dm, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL);
+
     pa_log_debug("bt sco close end");
     if (_device_item_set_active_profile_auto(bt_device) == NULL) {
         pa_log_error("set active profile auto failed");

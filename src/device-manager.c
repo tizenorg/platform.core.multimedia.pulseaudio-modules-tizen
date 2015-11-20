@@ -332,6 +332,10 @@ typedef struct dm_device_profile {
 
     /* device belongs to */
     dm_device *device_item;
+
+    /* creation time */
+    pa_usec_t creation_time;
+
 } dm_device_profile;
 
 /*
@@ -1321,7 +1325,7 @@ static dm_device* _device_item_set_active_profile(dm_device *device_item, const 
 
     if (prev_active_profile != device_item->active_profile) {
         pa_log_debug("%s's active profile : %u", device_item->name, device_item->active_profile);
-        notify_device_info_changed(device_item, DM_DEVICE_CHANGED_INFO_SUBTYPE, device_item->dm);
+        notify_device_info_changed(device_item, DM_DEVICE_CHANGED_INFO_IO_DIRECTION, device_item->dm);
     }
 
     return device_item;
@@ -1330,9 +1334,9 @@ static dm_device* _device_item_set_active_profile(dm_device *device_item, const 
 static int get_profile_priority(const char *device_profile) {
     if (!device_profile) {
         return 0;
-    } else if (pa_streq(device_profile,  DEVICE_PROFILE_BT_SCO)) {
-        return 1;
     } else if (pa_streq(device_profile,  DEVICE_PROFILE_BT_A2DP)) {
+        return 1;
+    } else if (pa_streq(device_profile,  DEVICE_PROFILE_BT_SCO)) {
         return 2;
     } else {
         return -1;
@@ -1384,9 +1388,9 @@ static dm_device* _device_item_set_active_profile_auto(dm_device *device_item) {
         }
     }
 
-    if (prev_active_profile != device_item->active_profile) {
+    if ((prev_active_profile != PA_INVALID_INDEX) && (prev_active_profile != device_item->active_profile)) {
         pa_log_debug("%s's active profile : %u", device_item->name, device_item->active_profile);
-        notify_device_info_changed(device_item, DM_DEVICE_CHANGED_INFO_SUBTYPE, device_item->dm);
+        notify_device_info_changed(device_item, DM_DEVICE_CHANGED_INFO_IO_DIRECTION, device_item->dm);
     }
 
     return device_item;
@@ -1558,6 +1562,7 @@ static dm_device_profile* create_device_profile(const char *device_profile, dm_d
     profile_item->capture_state = DM_DEVICE_STATE_DEACTIVATED;
     profile_item->playback_devices = playback;
     profile_item->capture_devices = capture;
+    profile_item->creation_time = pa_rtclock_now();
 
     return profile_item;
 }
@@ -3196,10 +3201,8 @@ static int handle_device_status_changed(pa_device_manager *dm, const char *devic
     } else if (pa_streq(device_type, DEVICE_TYPE_BT) && device_profile && pa_streq(device_profile, DEVICE_PROFILE_BT_SCO)) {
         if (detected_status == BT_SCO_DISCONNECTED) {
             dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_DISCONNECTED;
-            handle_device_disconnected(dm, device_type, device_profile, identifier);
         } else if (detected_status == BT_SCO_CONNECTED) {
             dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_CONNECTED;
-            handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_BT_SCO);
         } else {
             pa_log_warn("Got invalid bt-sco detected value");
             return -1;
@@ -4118,6 +4121,15 @@ dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_i
     return profile_item->direction;
 }
 
+pa_usec_t pa_device_manager_get_device_creation_time(dm_device *device_item) {
+    dm_device_profile *profile_item;
+
+    pa_assert(device_item);
+    pa_assert(profile_item = _device_item_get_active_profile(device_item));
+
+    return profile_item->creation_time;
+}
+
 pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role) {
     pa_sink *sink;
     pa_source *source;
@@ -4144,12 +4156,8 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     pa_assert(dm);
     pa_assert(dm->dbus_conn);
 
-    if (!(status_info = _device_manager_get_status_info(dm->device_status, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL))) {
-        pa_log_error("No status info for bt-sco");
-        return -1;
-    }
-    if (!status_info->detected) {
-        pa_log_error("bt-sco not detected");
+    if (dm->bt_sco_status != DM_DEVICE_BT_SCO_STATUS_CONNECTED) {
+        pa_log_error("bt-sco not connected");
         return -1;
     }
 
@@ -4165,11 +4173,8 @@ int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
     }
 
     pa_log_debug("bt sco open end");
-
-    if (_device_item_set_active_profile(bt_device, DEVICE_PROFILE_BT_SCO) == NULL) {
-        pa_log_error("set bt sco as active profile failed");
-    }
     dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_OPENED;
+    handle_device_connected(dm, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL, NULL, DEVICE_DETECTED_BT_SCO);
 
     return 0;
 }
@@ -4190,12 +4195,8 @@ int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
     pa_assert(dm);
     pa_assert(dm->dbus_conn);
 
-    if (!(status_info = _device_manager_get_status_info(dm->device_status, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL))) {
-        pa_log_error("No status info for bt-sco");
-        return -1;
-    }
-    if (!status_info->detected) {
-        pa_log_error("bt-sco not detected");
+    if (dm->bt_sco_status != DM_DEVICE_BT_SCO_STATUS_OPENED) {
+        pa_log_error("bt-sco not opened");
         return -1;
     }
 
@@ -4209,11 +4210,11 @@ int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
         pa_log_error("Failed to bt sco close");
         return -1;
     }
-    pa_log_debug("bt sco close end");
-    if (_device_item_set_active_profile_auto(bt_device) == NULL) {
-        pa_log_error("set active profile auto failed");
-    }
+
     dm->bt_sco_status = DM_DEVICE_BT_SCO_STATUS_CONNECTED;
+    handle_device_disconnected(dm, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO, NULL);
+
+    pa_log_debug("bt sco close end");
 
     return 0;
 }

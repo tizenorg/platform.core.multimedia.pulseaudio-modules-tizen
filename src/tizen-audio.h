@@ -92,7 +92,7 @@ typedef struct audio_interface {
     audio_return_t (*pcm_write)(void *userdata, void *pcm_handle, const void *buffer, uint32_t frames);
     audio_return_t (*pcm_read)(void *userdata, void *pcm_handle, void *buffer, uint32_t frames);
     audio_return_t (*pcm_get_fd)(void *userdata, void *pcm_handle, int *fd);
-    audio_return_t (*pcm_recover)(void *userdata, void *pcm_handle, int err);
+    audio_return_t (*pcm_recover)(void *userdata, void *pcm_handle, int revents);
     audio_return_t (*pcm_get_params)(void *userdata, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
     audio_return_t (*pcm_set_params)(void *userdata, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
 } audio_interface_t;
@@ -118,7 +118,7 @@ audio_return_t audio_pcm_avail(void *userdata, void *pcm_handle, uint32_t *avail
 audio_return_t audio_pcm_write(void *userdata, void *pcm_handle, const void *buffer, uint32_t frames);
 audio_return_t audio_pcm_read(void *userdata, void *pcm_handle, void *buffer, uint32_t frames);
 audio_return_t audio_pcm_get_fd(void *userdata, void *pcm_handle, int *fd);
-audio_return_t audio_pcm_recover(void *userdata, void *pcm_handle, int err);
+audio_return_t audio_pcm_recover(void *userdata, void *pcm_handle, int revents);
 audio_return_t audio_pcm_get_params(void *userdata, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
 audio_return_t audio_pcm_set_params(void *userdata, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
 #endif

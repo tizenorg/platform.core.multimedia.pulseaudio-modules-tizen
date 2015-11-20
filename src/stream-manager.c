@@ -1164,6 +1164,8 @@ static int convert_route_type(stream_route_type_t *route_type, const char *route
 
     if (pa_streq("auto", route_type_string))
         *route_type = STREAM_ROUTE_TYPE_AUTO;
+    else if (pa_streq("auto-last-connected", route_type_string))
+        *route_type = STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED;
     else if (pa_streq("auto-all", route_type_string))
         *route_type = STREAM_ROUTE_TYPE_AUTO_ALL;
     else if (pa_streq("manual", route_type_string))
@@ -1189,7 +1191,7 @@ static void dump_stream_map (pa_stream_manager *m) {
     while (m->stream_infos && (s = pa_hashmap_iterate(m->stream_infos, &state, (const void **)&role))) {
         pa_log_debug("[role : %s]", role);
         pa_log_debug("  - priority   : %d", s->priority);
-        pa_log_debug("  - route-type : %d (0:auto,1:auto-all,2:manual,3:manual-ext)", s->route_type);
+        pa_log_debug("  - route-type : %d (0:auto,1:auto-last-conn,2:auto-all,3:manual,4:manual-ext)", s->route_type);
         pa_log_debug("  - volume-types : in[%s], out[%s]", s->volume_types[STREAM_DIRECTION_IN], s->volume_types[STREAM_DIRECTION_OUT]);
         pa_log_debug("  - avail-in-devices");
         PA_IDXSET_FOREACH(name, s->idx_avail_in_devices, idx)
@@ -1971,6 +1973,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                                           (void*)(m->cur_highest_priority.source_output);
         if (s) {
             role = pa_proplist_gets(GET_STREAM_PROPLIST(s, type), PA_PROP_MEDIA_ROLE);
+            hook_call_route_data.stream = s;
             hook_call_route_data.stream_type = type;
             hook_call_route_data.stream_role = role;
             hook_call_route_data.sample_spec = GET_STREAM_SAMPLE_SPEC(s, type);
@@ -2508,33 +2511,55 @@ static pa_hook_result_t source_output_state_changed_cb(pa_core *core, pa_source_
     return PA_HOOK_OK;
 }
 
-static void find_next_priority_device_for_auto_route(const char *cur_device_type, const char *role, stream_type_t stream_type, char **next_device_type, pa_stream_manager *m) {
+static void find_next_device_for_auto_route(pa_stream_manager *m, stream_route_type_t route_type, const char *role, stream_type_t stream_type, const char *cur_device_type, dm_device **next_device) {
     stream_info *si = NULL;
     pa_idxset *devices = NULL;
     uint32_t idx = 0;
     char *device_type = NULL;
     pa_bool_t ret_next = FALSE;
+    pa_usec_t creation_time = 0;
+    pa_usec_t latest_creation_time = 0;
+    dm_device* latest_device = NULL;
 
     pa_assert(m);
     pa_assert(role);
     pa_assert(cur_device_type);
-    pa_assert(next_device_type);
+    pa_assert(next_device);
+    pa_assert((route_type == STREAM_ROUTE_TYPE_AUTO || route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED));
 
+    *next_device = NULL;
     if (m->stream_infos) {
         si = pa_hashmap_get(m->stream_infos, role);
-        if (si && si->route_type == STREAM_ROUTE_TYPE_AUTO) {
+        if (si && si->route_type == route_type) {
             devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
             if (devices) {
-                PA_IDXSET_FOREACH(device_type, devices, idx) {
-                    if (ret_next) {
-                        *next_device_type = device_type;
-                        pa_log_debug("found next device[%s]", *next_device_type);
-                        break;
+                if (route_type == STREAM_ROUTE_TYPE_AUTO) {
+                    PA_IDXSET_FOREACH(device_type, devices, idx) {
+                        if (ret_next) {
+                            if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
+                                pa_log_debug("found next device[%s, %p]", device_type, *next_device);
+                                break;
+                            } else
+                                continue;
+                        }
+                        if (pa_streq(device_type, cur_device_type)) {
+                            ret_next = TRUE;
+                            continue;
+                        }
                     }
-                    if (pa_streq(device_type, cur_device_type)) {
-                        ret_next = TRUE;
-                        continue;
+
+                } else if (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
+                    PA_IDXSET_FOREACH(device_type, devices, idx) {
+                        if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
+                            creation_time = pa_device_manager_get_device_creation_time(*next_device);
+                            if (!latest_device || (latest_creation_time <= creation_time)) {
+                                latest_device = *next_device;
+                                latest_creation_time = creation_time;
+                            }
+                        }
                     }
+                    *next_device = latest_device;
+                    pa_log_debug("found next device[%s, %p], creation_time[%lld]", device_type, *next_device, latest_creation_time);
                 }
             } else
                 pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
@@ -2543,12 +2568,56 @@ static void find_next_priority_device_for_auto_route(const char *cur_device_type
     } else
         pa_log_error("stream_infos is null");
 
-    pa_log_debug("next_device_type is [%s] for role[%s]/stream_type[%d]", *next_device_type, role, stream_type);
+    pa_log_debug("next_device is [%p] for role[%s]/route_type[%d]/stream_type[%d]", *next_device, role, route_type, stream_type);
 
     return;
+}
 
-FAILURE:
-    *next_device_type = NULL;
+void is_available_device_for_auto_route(pa_stream_manager *m, stream_route_type_t route_type, const char *cur_device_type, const char *new_device_type, const char *role, stream_type_t stream_type, pa_bool_t *available) {
+    stream_info *si = NULL;
+    pa_idxset *devices = NULL;
+    uint32_t idx = 0;
+    char *device_type = NULL;
+
+    pa_assert(m);
+    pa_assert(role);
+    pa_assert(cur_device_type);
+    pa_assert(new_device_type);
+    pa_assert(available);
+    pa_assert((route_type == STREAM_ROUTE_TYPE_AUTO || route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED));
+
+    if (m->stream_infos) {
+        si = pa_hashmap_get(m->stream_infos, role);
+        if (si && si->route_type == route_type) {
+            *available = FALSE;
+            devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
+            if (devices) {
+                PA_IDXSET_FOREACH(device_type, devices, idx) {
+                    if (route_type == STREAM_ROUTE_TYPE_AUTO) {
+                        if (cur_device_type && pa_streq(device_type, cur_device_type)) {
+                            pa_log_debug("cur_device[%s]'s priority is more higher than new_device[%s]", cur_device_type, new_device_type);
+                            break;
+                        }
+                    }
+                    if (pa_streq(device_type, new_device_type)) {
+                        *available = TRUE;
+                        break;
+                    }
+                }
+            } else {
+                pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
+                *available = FALSE;
+            }
+        } else {
+            pa_log_warn("not support this role[%s]", role);
+            *available = FALSE;
+        }
+    } else {
+        pa_log_error("stream_infos is null");
+        *available = FALSE;
+    }
+    pa_log_debug("is new_device[%s] available for role[%s]/stream_type[%d]:%d", new_device_type, role, stream_type, *available);
+
     return;
 }
 
@@ -2563,7 +2632,8 @@ static void process_stream_as_device_change_for_auto_route(pa_stream_manager *m,
     pa_log_debug("[SM][PROCESS_STREAM_FOR_AUTO] stream(%p), stream_type(%d), is_connected(%d), use_internal_codec(%d)",
         stream, stream_type, is_connected, use_internal_codec);
 
-    if (pa_stream_manager_get_route_type(stream, FALSE, stream_type, &route_type) || route_type != STREAM_ROUTE_TYPE_AUTO)
+    if (pa_stream_manager_get_route_type(stream, FALSE, stream_type, &route_type) ||
+        (route_type != STREAM_ROUTE_TYPE_AUTO && route_type != STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))
         return;
 
     if (is_connected) {
@@ -2610,7 +2680,7 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
     const char *device_type = NULL;
     const char *cur_device_type = NULL;
     const char *init_device_type = NULL;
-    char *next_device_type = NULL;
+    //char *next_device_type = NULL;
     dm_device *next_device = NULL;
     dm_device *_device = NULL;
     stream_route_type_t route_type;
@@ -2638,8 +2708,9 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
     }
     device_type = pa_device_manager_get_device_type(device);
 
-    if (stream_route_type == STREAM_ROUTE_TYPE_AUTO) {
-        pa_log_debug("[SM][UPDATE_SINK_SOURCE][AUTO] deivce_type(%s), is_connected(%d))", device_type, is_connected);
+    if (stream_route_type == STREAM_ROUTE_TYPE_AUTO || stream_route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
+        pa_log_debug("[SM][UPDATE_SINK_SOURCE][AUTO] route_type(%d), deivce_type(%s), is_connected(%d))",
+                     stream_route_type, device_type, is_connected);
         if (stream_type == STREAM_SINK_INPUT)
             sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
         else
@@ -2653,27 +2724,29 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
                     /* CONNECTED: move a stream to the new device if possible */
                     if (sink && (sink != ((pa_sink_input*)s)->sink)) {
                         if ((cur_device_type = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV))) {
-                            pa_stream_manager_is_available_device_for_auto_route(cur_device_type, device_type, role, stream_type, &available, m);
+                            is_available_device_for_auto_route(m, route_type, cur_device_type, device_type, role, stream_type, &available);
                             if (available) {
                                 pa_sink_input_move_to(s, sink, FALSE);
                                 pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s), new device(%s)",
-                                    s, ((pa_sink_input*)s)->index, sink, sink->name, device_type);
+                                             s, ((pa_sink_input*)s)->index, sink, sink->name, device_type);
                                 use_internal_codec = sink->use_internal_codec;
                             }
                         } else
                             pa_log_error("  -- could not find current device type for s->sink(%p)", ((pa_sink_input*)s)->sink);
                     } else if (source && (source != ((pa_source_output*)s)->source)) {
                         if ((cur_device_type = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV))) {
-                            pa_stream_manager_is_available_device_for_auto_route(cur_device_type, device_type, role, stream_type, &available, m);
+                            is_available_device_for_auto_route(m, route_type, cur_device_type, device_type, role, stream_type, &available);
                             if (available) {
                                 pa_source_output_move_to(s, source, FALSE);
                                 pa_log_debug("  -- *** source-output(%p,%u) moves to source(%p,%s), new device(%s)",
-                                    s, ((pa_source_output*)s)->index, source, source->name, device_type);
+                                             s, ((pa_source_output*)s)->index, source, source->name, device_type);
                                 use_internal_codec = source->use_internal_codec;
                             }
                         } else
                             pa_log_error("  -- could not find current device type for s->source(%p)", ((pa_source_output*)s)->source);
-                    }
+                    } else
+                        pa_log_debug("no need to move for stream(%p, idx:%u)", s, (stream_type == STREAM_SINK_INPUT ?
+                                     ((pa_sink_input*)s)->index : ((pa_source_output*)s)->index));
                     if (available) {
                         /* update activated device */
                         pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
@@ -2687,33 +2760,26 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
                     /* DISCONNECTED: find a connected device that has the next priority */
                     if (sink && (sink == ((pa_sink_input*)s)->sink)) {
                         init_device_type = device_type;
-                        do {
-                            find_next_priority_device_for_auto_route(device_type, role, stream_type, &next_device_type, m);
-                            pa_log_debug("  -- prev_device(%s), new_device(%s)", device_type, next_device_type);
-                            if (next_device_type) {
-                                if ((next_device = pa_device_manager_get_device(m->dm, next_device_type))) {
-                                    if ((next_sink = pa_device_manager_get_sink(next_device, DEVICE_ROLE_NORMAL))) {
-                                        /* update activated device */
-                                        pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, next_device_type);
-                                        set_device_state_if_using_internal_codec(next_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
-                                        cached_prev_dev_list[cnt++].device_type = init_device_type;
-                                        /* trigger to update routing path if the next device uses internal audio codec */
-                                        if (next_sink->use_internal_codec)
-                                            process_stream_as_device_change_for_auto_route(m, s, stream_type, is_connected, next_sink->use_internal_codec);
+                        find_next_device_for_auto_route(m, route_type, role, stream_type, device_type, &next_device);
+                        pa_log_debug("  -- prev_device(%s), new_device(%p)", device_type, next_device);
+                        if (next_device) {
+                            if ((next_sink = pa_device_manager_get_sink(next_device, DEVICE_ROLE_NORMAL))) {
+                                device_type = pa_device_manager_get_device_type(next_device);
+                                /* update activated device */
+                                pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
+                                set_device_state_if_using_internal_codec(next_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
+                                cached_prev_dev_list[cnt++].device_type = init_device_type;
+                                /* trigger to update routing path if the next device uses internal audio codec */
+                                if (next_sink->use_internal_codec)
+                                    process_stream_as_device_change_for_auto_route(m, s, stream_type, is_connected, next_sink->use_internal_codec);
 
-                                        pa_sink_input_move_to(s, next_sink, FALSE);
-                                        pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s), new device(%s)",
-                                            s, ((pa_sink_input*)s)->index, next_sink, next_sink->name, next_device_type);
-                                        break;
-                                    }
-                                } else {
-                                    device_type = next_device_type;
-                                    continue;
+                                pa_sink_input_move_to(s, next_sink, FALSE);
+                                pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s), new device(%s)",
+                                             s, ((pa_sink_input*)s)->index, next_sink, next_sink->name, device_type);
                                 }
-                            }
-                        } while (next_device_type);
+                        }
 
-                        if (!next_device_type || !next_sink) {
+                        if (!next_device || !next_sink) {
                             pa_sink_input_move_to(s, null_sink, FALSE);
                             pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s)",
                                 s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
@@ -2721,33 +2787,25 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
 
                     } else if (source && (source == ((pa_source_output*)s)->source)) {
                         init_device_type = device_type;
-                        do {
-                            find_next_priority_device_for_auto_route(device_type, role, stream_type, &next_device_type, m);
-                            pa_log_debug("  -- prev_device(%s), new_device(%s)", device_type, next_device_type);
-                            if (next_device_type) {
-                                if ((next_device = pa_device_manager_get_device(m->dm, next_device_type))) {
-                                    if ((next_source = pa_device_manager_get_source(next_device, DEVICE_ROLE_NORMAL))) {
-                                        /* update activated device */
-                                        pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, next_device_type);
-                                        set_device_state_if_using_internal_codec(next_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
-                                        cached_prev_dev_list[cnt++].device_type = init_device_type;
-                                        /* trigger to update routing path if the next device uses internal audio codec */
-                                        if (next_source->use_internal_codec)
-                                            process_stream_as_device_change_for_auto_route(m, s, stream_type, is_connected, next_source->use_internal_codec);
+                        find_next_device_for_auto_route(m, route_type, role, stream_type, device_type, &next_device);
+                        pa_log_debug("  -- prev_device(%s), new_device(%p)", device_type, next_device);
+                        if (next_device) {
+                            if ((next_source = pa_device_manager_get_source(next_device, DEVICE_ROLE_NORMAL))) {
+                                device_type = pa_device_manager_get_device_type(next_device);
+                                /* update activated device */
+                                pa_proplist_sets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, device_type);
+                                set_device_state_if_using_internal_codec(next_device, stream_type, DM_DEVICE_STATE_ACTIVATED);
+                                cached_prev_dev_list[cnt++].device_type = init_device_type;
+                                /* trigger to update routing path if the next device uses internal audio codec */
+                                if (next_source->use_internal_codec)
+                                    process_stream_as_device_change_for_auto_route(m, s, stream_type, is_connected, next_source->use_internal_codec);
 
-                                        pa_source_output_move_to(s, next_source, FALSE);
-                                        pa_log_debug("  -- *** source-output(%p,%u) moves to source(%p,%s), new device(%s)",
-                                            s, ((pa_source_output*)s)->index, next_source, next_source->name, next_device_type);
-                                        break;
-                                    }
-                                } else {
-                                    device_type = next_device_type;
-                                    continue;
+                                pa_source_output_move_to(s, next_source, FALSE);
+                                pa_log_debug("  -- *** source-output(%p,%u) moves to source(%p,%s), new device(%s)",
+                                             s, ((pa_source_output*)s)->index, next_source, next_source->name, device_type);
                                 }
-                            }
-                        } while (next_device_type);
-
-                        if (!next_device_type || !next_source) {
+                        }
+                        if (!next_device || !next_source) {
                             pa_source_output_move_to(s, null_source, FALSE);
                             pa_log_debug("  -- *** source-output(%p,%u) moves to source(%p,%s)",
                                 s, ((pa_source_output*)s)->index, null_source, null_source->name);
@@ -2850,12 +2908,18 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     }
 
     /* Update all the streams that have AUTO route type */
-    if (device_direction & DM_DEVICE_DIRECTION_IN)
+    if (device_direction & DM_DEVICE_DIRECTION_IN) {
         update_sink_or_source_as_device_change(STREAM_ROUTE_TYPE_AUTO, m->core->source_outputs,
                                                STREAM_SOURCE_OUTPUT, data->device, data->is_connected, m);
-    if (device_direction & DM_DEVICE_DIRECTION_OUT)
+        update_sink_or_source_as_device_change(STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED, m->core->source_outputs,
+                                               STREAM_SOURCE_OUTPUT, data->device, data->is_connected, m);
+    }
+    if (device_direction & DM_DEVICE_DIRECTION_OUT) {
         update_sink_or_source_as_device_change(STREAM_ROUTE_TYPE_AUTO, m->core->sink_inputs,
                                                STREAM_SINK_INPUT, data->device, data->is_connected, m);
+        update_sink_or_source_as_device_change(STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED, m->core->sink_inputs,
+                                               STREAM_SINK_INPUT, data->device, data->is_connected, m);
+    }
 
 
     /* If the route type of the stream is not manual, notify again */
@@ -2864,8 +2928,8 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
             if (route_type < STREAM_ROUTE_TYPE_MANUAL) {
                 if (use_internal_codec) {
                     PA_IDXSET_FOREACH (s, m->cur_highest_priority.source_output->source->outputs, s_idx) {
-                        if (!pa_stream_manager_get_route_type(s, FALSE, STREAM_SOURCE_OUTPUT, &route_type) &&
-                            (route_type == STREAM_ROUTE_TYPE_AUTO) && !data->is_connected) {
+                        if (!data->is_connected && !pa_stream_manager_get_route_type(s, FALSE, STREAM_SOURCE_OUTPUT, &route_type) &&
+                            ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
                             if (pa_streq(active_dev, device_type))
@@ -2888,8 +2952,8 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
             if (route_type < STREAM_ROUTE_TYPE_MANUAL) {
                 if (use_internal_codec) {
                     PA_IDXSET_FOREACH (s, m->cur_highest_priority.sink_input->sink->inputs, s_idx) {
-                        if (!pa_stream_manager_get_route_type(s, FALSE, STREAM_SINK_INPUT, &route_type) &&
-                            (route_type == STREAM_ROUTE_TYPE_AUTO) && !data->is_connected) {
+                        if (!data->is_connected && !pa_stream_manager_get_route_type(s, FALSE, STREAM_SINK_INPUT, &route_type) &&
+                            ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
                             if (pa_streq(active_dev, device_type))
@@ -2897,7 +2961,8 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                         }
                     }
                     do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, STREAM_SINK_INPUT, FALSE, m->cur_highest_priority.sink_input);
-                    if ((route_type == STREAM_ROUTE_TYPE_AUTO) && !((pa_sink_input*)(m->cur_highest_priority.sink_input))->sink->use_internal_codec) {
+                    if (((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED)) &&
+                       !((pa_sink_input*)(m->cur_highest_priority.sink_input))->sink->use_internal_codec) {
                         /* If the sink of the cur_highest_priority stream uses external codec, it should be updated.
                          * As only the process_stream(PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED)
                          * can update the cur_highest_priority, call it here */
@@ -3055,51 +3120,6 @@ int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_ne
     }
 
 	return 0;
-}
-
-void pa_stream_manager_is_available_device_for_auto_route(const char *cur_device_type, const char *new_device_type, const char *role, stream_type_t stream_type, pa_bool_t *available, pa_stream_manager *m) {
-    stream_info *si = NULL;
-    pa_idxset *devices = NULL;
-    uint32_t idx = 0;
-    char *device_type = NULL;
-
-    pa_assert(m);
-    pa_assert(role);
-    pa_assert(cur_device_type);
-    pa_assert(new_device_type);
-    pa_assert(available);
-
-    if (m->stream_infos) {
-        si = pa_hashmap_get(m->stream_infos, role);
-        if (si) {
-            *available = FALSE;
-            devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
-            if (devices) {
-                PA_IDXSET_FOREACH(device_type, devices, idx) {
-                    if (cur_device_type && pa_streq(device_type, cur_device_type)) {
-                        pa_log_debug("cur_device[%s]'s priority is more higher than new_device[%s]", cur_device_type, new_device_type);
-                        break;
-                    }
-                    if (pa_streq(device_type, new_device_type)) {
-                        *available = TRUE;
-                        break;
-                    }
-                }
-            } else {
-                pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
-                *available = FALSE;
-            }
-        } else {
-            pa_log_warn("not support this role[%s]", role);
-            *available = FALSE;
-        }
-    } else {
-        pa_log_error("stream_infos is null");
-        *available = FALSE;
-    }
-    pa_log_debug("is new_device[%s] available for role[%s]/stream_type[%d]:%d", new_device_type, role, stream_type, *available);
-
-    return;
 }
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c) {

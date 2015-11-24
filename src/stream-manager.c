@@ -1901,6 +1901,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
     hal_stream_connection_info stream_conn_info;
     const char *role = NULL;
     void *s = NULL;
+    const char *modifier_gain = NULL;
 
     pa_assert(m);
     pa_log_debug("do_notify(%s): type(%d), is_new_data(%d), user_data(%p)", notify_command_type_str[command], type, is_new_data, user_data);
@@ -1917,10 +1918,23 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                 hook_call_select_data.stream_role = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(s, type), PA_PROP_MEDIA_ROLE);
                 fill_device_info_to_hook_data(m, &hook_call_select_data, command, type, s, is_new_data);
                 hook_call_select_data.sample_spec = GET_STREAM_NEW_SAMPLE_SPEC(s, type);
-                if (type == STREAM_SINK_INPUT)
+                if (type == STREAM_SINK_INPUT) {
                     hook_call_select_data.proper_sink = &(((pa_sink_input_new_data*)s)->sink);
-                else if (type == STREAM_SOURCE_OUTPUT)
+                    /* need to check modifier_gain, because we do not skip a stream that is from module-sound-player */
+                    modifier_gain = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(s, type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
+                    if (((pa_sink_input_new_data*)s)->sink && !modifier_gain) {
+                        pa_log_info("  - sink(%s) has been already selected, skip selecting sink",
+                                    (((pa_sink_input_new_data*)s)->sink)->name);
+                        break;
+                    }
+                } else if (type == STREAM_SOURCE_OUTPUT) {
                     hook_call_select_data.proper_source = &(((pa_source_output_new_data*)s)->source);
+                    if (((pa_source_output_new_data*)s)->source) {
+                        pa_log_info("  - source(%s) has been already selected, skip selecting source",
+                                    (((pa_source_output_new_data*)s)->source)->name);
+                        break;
+                    }
+                }
             } else {
                 hook_call_select_data.stream_role = pa_proplist_gets(GET_STREAM_PROPLIST(s, type), PA_PROP_MEDIA_ROLE);
                 fill_device_info_to_hook_data(m, &hook_call_select_data, command, type, s, is_new_data);

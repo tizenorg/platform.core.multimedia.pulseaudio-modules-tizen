@@ -29,8 +29,7 @@ typedef enum dm_device_direction_type {
 
 typedef enum dm_device_changed_into_type {
     DM_DEVICE_CHANGED_INFO_STATE,
-    DM_DEVICE_CHANGED_INFO_IO_DIRECTION,
-    DM_DEVICE_CHANGED_INFO_SUBTYPE,
+    DM_DEVICE_CHANGED_INFO_IO_DIRECTION
 } dm_device_changed_info_t;
 
 typedef enum dm_device_state_type {

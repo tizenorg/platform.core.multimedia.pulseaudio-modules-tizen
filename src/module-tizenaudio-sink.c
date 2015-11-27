@@ -86,6 +86,7 @@ struct userdata {
 
     pa_usec_t block_usec;
     pa_usec_t timestamp;
+    pa_usec_t timestamp_written;
 
     char* device_name;
     bool first;
@@ -225,7 +226,6 @@ static int sink_process_msg(
                             return -PA_ERR_IO;
                     }
 
-                    u->timestamp = pa_rtclock_now();
                     if (u->sink->thread_info.state == PA_SINK_SUSPENDED) {
                         if ((r = unsuspend(u)) < 0)
                             return r;
@@ -241,11 +241,14 @@ static int sink_process_msg(
             break;
 
         case PA_SINK_MESSAGE_GET_LATENCY: {
-            pa_usec_t now;
-
-            now = pa_rtclock_now();
-            *((pa_usec_t*)data) = u->timestamp > now ? u->timestamp - now : 0ULL;
-
+            pa_usec_t now = pa_rtclock_now();
+            pa_usec_t latency = 0ULL;
+            if (u->timestamp > now) {
+                if ((u->timestamp - now) > (now - u->timestamp_written)) {
+                    latency = (u->timestamp - now) + (u->timestamp_written - now);
+                }
+            }
+            *((pa_usec_t*)data) = latency;
             return 0;
         }
     }
@@ -332,6 +335,7 @@ static int process_render(struct userdata *u, pa_usec_t now) {
         if (u->first) {
             pa_log_debug("Fill initial buffer");
             frames_to_write = (u->frag_size * u->nfrags) / frame_size;
+            u->timestamp = u->timestamp_written = now;
         } else {
             frames_to_write = u->sink->thread_info.max_request / frame_size;
             if (frames_to_write > avail)
@@ -346,6 +350,7 @@ static int process_render(struct userdata *u, pa_usec_t now) {
         pa_memblock_release(chunk.memblock);
         pa_memblock_unref(chunk.memblock);
         u->timestamp += pa_bytes_to_usec(chunk.length, &u->sink->sample_spec);
+        u->timestamp_written = pa_rtclock_now();
 
         work_done = 1;
 
@@ -366,7 +371,6 @@ static void thread_func(void *userdata) {
 
     pa_log_debug("Thread starting up");
     pa_thread_mq_install(&u->thread_mq);
-    u->timestamp = pa_rtclock_now();
 
     for (;;) {
         pa_usec_t now = 0;
@@ -380,24 +384,20 @@ static void thread_func(void *userdata) {
 
         /* Render some data and drop it immediately */
         if (PA_SINK_IS_OPENED(u->sink->thread_info.state)) {
-            if (u->timestamp <= now) {
-                int work_done = process_render(u, now);
+            int work_done = process_render(u, now);
 
-                if (work_done < 0)
-                    goto fail;
+            if (work_done < 0)
+                goto fail;
 
-                if (work_done == 0) {
-                    pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
-                } else {
-                    if (u->first) {
-                        pa_log_info("Starting playback.");
-                        pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
-                        u->first = false;
-                    }
-                    pa_rtpoll_set_timer_absolute(u->rtpoll, u->timestamp);
-                }
+            if (work_done == 0) {
+                pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
             } else {
-                pa_rtpoll_set_timer_absolute(u->rtpoll, u->timestamp);
+                if (u->first) {
+                    pa_log_info("Starting playback.");
+                    pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
+                    u->first = false;
+                }
+                pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
             }
         } else {
             pa_rtpoll_set_timer_disabled(u->rtpoll);
@@ -518,6 +518,8 @@ int pa__init(pa_module*m) {
     unsuspend (u);
 
     u->block_usec = BLOCK_USEC;
+    u->timestamp = 0ULL;
+    u->timestamp_written = 0ULL;
 
     nbytes = pa_usec_to_bytes(u->block_usec, &u->sink->sample_spec);
     pa_sink_set_max_rewind(u->sink, 0);

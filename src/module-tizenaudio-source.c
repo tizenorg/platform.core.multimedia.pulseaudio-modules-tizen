@@ -227,7 +227,6 @@ static int source_process_msg(
                             return -PA_ERR_IO;
                     }
 
-                    u->timestamp = pa_rtclock_now();
                     if (u->source->thread_info.state == PA_SOURCE_SUSPENDED) {
                         if ((r = unsuspend(u)) < 0)
                             return r;
@@ -243,11 +242,8 @@ static int source_process_msg(
             break;
 
         case PA_SOURCE_MESSAGE_GET_LATENCY: {
-            pa_usec_t now;
-
-            now = pa_rtclock_now();
-            *((pa_usec_t*)data) = u->timestamp > now ? u->timestamp - now : 0ULL;
-
+            pa_usec_t now = pa_rtclock_now();
+            *((pa_usec_t*)data) = u->timestamp > now ? 0ULL : now - u->timestamp;
             return 0;
         }
     }
@@ -327,7 +323,6 @@ static void thread_func(void *userdata) {
     pa_assert(u);
     pa_log_debug("Thread starting up");
     pa_thread_mq_install(&u->thread_mq);
-    u->timestamp = pa_rtclock_now();
 
     for (;;) {
         pa_usec_t now = 0;
@@ -338,25 +333,22 @@ static void thread_func(void *userdata) {
 
         /* Render some data and drop it immediately */
         if (PA_SOURCE_IS_OPENED(u->source->thread_info.state)) {
-            if (u->timestamp <= now) {
-                int work_done;
+            int work_done;
 
-                if (u->first) {
-                    pa_log_info("Starting capture.");
-                    pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
-                    u->first = false;
-                }
+            if (u->first) {
+                pa_log_info("Starting capture.");
+                pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
+                u->first = false;
+                u->timestamp = now;
+            }
 
-                work_done = process_render(u, now);
+            work_done = process_render(u, now);
 
-                if (work_done < 0)
-                    goto fail;
+            if (work_done < 0)
+                goto fail;
 
-                if (work_done == 0) {
-                    pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
-                } else {
-                    pa_rtpoll_set_timer_absolute(u->rtpoll, u->timestamp);
-                }
+            if (work_done == 0) {
+                pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
             } else {
                 pa_rtpoll_set_timer_absolute(u->rtpoll, u->timestamp);
             }
@@ -479,6 +471,7 @@ int pa__init(pa_module*m) {
 
     u->block_usec = BLOCK_USEC;
     u->latency_time = u->block_usec;
+    u->timestamp = 0ULL;
 
     pa_source_set_max_rewind(u->source, 0);
 

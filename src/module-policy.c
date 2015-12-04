@@ -745,10 +745,13 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                 pa_xfree(args);
                             }
                             sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK);
-                            PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
-                                if (s == data->stream) {
-                                    pa_sink_input_move_to(s, sink, FALSE);
-                                    pa_log_debug("[ROUTE][AUTO_ALL] *** sink-#if 0input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                            if (sink) {
+                                PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
+                                    if (s == data->stream) {
+                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** sink-#if 0input(%p,%u) moves to sink(%p,%s)",
+                                                     s, ((pa_sink_input*)s)->index, sink, sink->name);
+                                    }
                                 }
                             }
                         }
@@ -764,17 +767,18 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         /* move sink-inputs/source-outputs if needed */
                         if (data->idx_streams) {
                             PA_IDXSET_FOREACH (s, data->idx_streams, s_idx) { /* data->idx_streams: null_sink */
-                                if ((sink && (sink != ((pa_sink_input*)s)->sink)) || (source && (source != ((pa_source_output*)s)->source))) {
-                                    if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) && (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
-                                        if (data->stream_type == STREAM_SINK_INPUT) {
-                                            pa_sink_input_move_to(s, sink, FALSE);
-                                            pa_log_debug("[ROUTE][AUTO_ALL] *** sink-input(%p,%u) moves to sink(%p,%s)",
-                                                         s, ((pa_sink_input*)s)->index, sink, sink->name);
-                                        } else if (data->stream_type == STREAM_SOURCE_OUTPUT) {
-                                            pa_source_output_move_to(s, source, FALSE);
-                                            pa_log_debug("[ROUTE][AUTO_ALL] *** source-output(%p,%u) moves to source(%p,%s)",
-                                                         s, ((pa_source_output*)s)->index, source, source->name);
-                                        }
+                                 if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) &&
+                                     (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
+                                    if (data->stream_type == STREAM_SINK_INPUT &&
+                                        sink && (sink != ((pa_sink_input*)s)->sink)) {
+                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                                     s, ((pa_sink_input*)s)->index, sink, sink->name);
+                                    } else if (data->stream_type == STREAM_SOURCE_OUTPUT &&
+                                               source && (source != ((pa_source_output*)s)->source)) {
+                                        pa_source_output_move_to(s, source, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** source-output(%p,%u) moves to source(%p,%s)",
+                                                     s, ((pa_source_output*)s)->index, source, source->name);
                                     }
                                 }
                             }

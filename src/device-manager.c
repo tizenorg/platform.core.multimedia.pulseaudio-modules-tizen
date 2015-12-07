@@ -2226,10 +2226,6 @@ failed :
         pa_hashmap_free(playback);
     if (capture)
         pa_hashmap_free(capture);
-    if (device_item && made_newly)
-        pa_xfree(device_item);
-    if (profile_item)
-        pa_xfree(profile_item);
     return NULL;
 }
 
@@ -2856,8 +2852,6 @@ static struct device_file_info* parse_device_file_object(json_object *device_fil
     return file_info;
 
 failed :
-    if (roles)
-        pa_xfree(roles);
 
     return NULL;
 }
@@ -3125,6 +3119,7 @@ static int handle_device_connected(pa_device_manager *dm, const char *device_typ
 
     if (!(type_info = _device_manager_get_type_info(dm->type_infos, device_type, device_profile))) {
         pa_log_error("Failed to get type_info for %s.%s", device_type, device_profile);
+        return -1;
     }
 
     if((device_item = _device_manager_get_device(dm->device_list, type_info->type))) {
@@ -3800,8 +3795,8 @@ static void handle_get_bt_a2dp_status(DBusConnection *conn, DBusMessage *msg, vo
 
     pa_assert_se((reply = dbus_message_new_method_return(msg)));
 
-    if (!(device_item = _device_manager_get_device(dm->device_list, DEVICE_TYPE_BT))) {
-        if (!(profile_item = _device_item_get_profile(device_item, DEVICE_PROFILE_BT_A2DP))) {
+    if ((device_item = _device_manager_get_device(dm->device_list, DEVICE_TYPE_BT)) != NULL) {
+        if ((profile_item = _device_item_get_profile(device_item, DEVICE_PROFILE_BT_A2DP)) != NULL) {
             is_bt_on = TRUE;
             bt_name = device_item->name;
         }

@@ -1073,22 +1073,24 @@ static void handle_update_focus_status(DBusConnection *conn, DBusMessage *msg, v
         if (sp->focus_status != (acquired_focus_status & (STREAM_FOCUS_ACQUIRED_PLAYBACK|STREAM_FOCUS_ACQUIRED_CAPTURE))) {
             /* need to update */
             sp->focus_status = acquired_focus_status & (STREAM_FOCUS_ACQUIRED_PLAYBACK|STREAM_FOCUS_ACQUIRED_CAPTURE);
-            if (sp->idx_sink_inputs)
+            if (sp->idx_sink_inputs) {
                 count = pa_idxset_size(sp->idx_sink_inputs);
-               PA_IDXSET_FOREACH(stream, sp->idx_sink_inputs, idx) {
-                   pa_proplist_sets(GET_STREAM_PROPLIST(stream, STREAM_SINK_INPUT), PA_PROP_MEDIA_FOCUS_STATUS,
-                        IS_FOCUS_ACQUIRED(sp->focus_status, STREAM_SINK_INPUT)?STREAM_FOCUS_PLAYBACK:STREAM_FOCUS_NONE);
+                PA_IDXSET_FOREACH(stream, sp->idx_sink_inputs, idx) {
+                    pa_proplist_sets(GET_STREAM_PROPLIST(stream, STREAM_SINK_INPUT), PA_PROP_MEDIA_FOCUS_STATUS,
+                                     IS_FOCUS_ACQUIRED(sp->focus_status, STREAM_SINK_INPUT)?STREAM_FOCUS_PLAYBACK:STREAM_FOCUS_NONE);
                     if (--count == 0)
                         process_stream(m, stream, STREAM_SINK_INPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_FOCUS_CHANGED, FALSE);
                 }
-            if (sp->idx_source_outputs)
+            }
+            if (sp->idx_source_outputs) {
                 count = pa_idxset_size(sp->idx_source_outputs);
                 PA_IDXSET_FOREACH(stream, sp->idx_source_outputs, idx) {
                     pa_proplist_sets(GET_STREAM_PROPLIST(stream, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_FOCUS_STATUS,
-                        IS_FOCUS_ACQUIRED(sp->focus_status, STREAM_SOURCE_OUTPUT)?STREAM_FOCUS_CAPTURE:STREAM_FOCUS_NONE);
+                                     IS_FOCUS_ACQUIRED(sp->focus_status, STREAM_SOURCE_OUTPUT)?STREAM_FOCUS_CAPTURE:STREAM_FOCUS_NONE);
                     if (--count == 0)
                         process_stream(m, stream, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_FOCUS_CHANGED, FALSE);
                 }
+            }
         } else
             pa_log_debug("same as before, skip updating focus status[0x%x]", acquired_focus_status);
 
@@ -1826,66 +1828,73 @@ static void fill_device_info_to_hook_data(pa_stream_manager *m, void *hook_data,
     switch (command) {
     case NOTIFY_COMMAND_SELECT_PROPER_SINK_OR_SOURCE_FOR_INIT: {
         select_data = (pa_stream_manager_hook_data_for_select*)hook_data;
-        si = pa_hashmap_get(m->stream_infos, select_data->stream_role);
-        select_data->route_type = si->route_type;
-        avail_devices = (type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
-        list_len = pa_idxset_size(avail_devices);
-        device_none = pa_idxset_get_by_data(avail_devices, "none", NULL);
-        if (list_len == 0 || device_none) {
-            pa_log_warn("  -- there is no available device, stream_type(%d)", type);
-            break;
-        }
-        select_data->idx_avail_devices = avail_devices;
-        select_data->origins_from_new_data = is_new_data;
-        if (si->route_type >= STREAM_ROUTE_TYPE_MANUAL) {
-            if (is_new_data)
-                p_idx = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
-            else
-                p_idx = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
-            if (p_idx && !pa_atou(p_idx, &parent_idx)) {
-                /* find parent idx, it's device info. and it's stream idxs */
-                sp = pa_hashmap_get(m->stream_parents, (const void*)parent_idx);
-                if (sp)
-                    select_data->idx_manual_devices = (type == STREAM_SINK_INPUT) ? (sp->idx_route_out_devices) : (sp->idx_route_in_devices);
+        if ((si = pa_hashmap_get(m->stream_infos, select_data->stream_role))) {
+            select_data->route_type = si->route_type;
+            avail_devices = (type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
+            list_len = pa_idxset_size(avail_devices);
+            device_none = pa_idxset_get_by_data(avail_devices, "none", NULL);
+
+            if (list_len == 0 || device_none) {
+                pa_log_warn("  -- there is no available device, stream_type(%d)", type);
+                break;
+            }
+            select_data->idx_avail_devices = avail_devices;
+            select_data->origins_from_new_data = is_new_data;
+            if (si->route_type >= STREAM_ROUTE_TYPE_MANUAL) {
+                if (is_new_data)
+                    p_idx = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
                 else
-                    pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
-            } else
-                pa_log_warn("  -- could not get the parent id of this stream, but keep going...");
-        }
+                    p_idx = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
+                if (p_idx && !pa_atou(p_idx, &parent_idx)) {
+                    /* find parent idx, it's device info. and it's stream idxs */
+                    sp = pa_hashmap_get(m->stream_parents, (const void*)parent_idx);
+                    if (sp)
+                        select_data->idx_manual_devices = (type == STREAM_SINK_INPUT) ? (sp->idx_route_out_devices) : (sp->idx_route_in_devices);
+                    else
+                        pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
+                } else
+                    pa_log_warn("  -- could not get the parent id of this stream, but keep going...");
+            }
+        } else
+            pa_log_error("  -- could not find (%s)", route_data->stream_role);
+
         break;
     }
     case NOTIFY_COMMAND_CHANGE_ROUTE_START:
     case NOTIFY_COMMAND_CHANGE_ROUTE_END: {
         route_data = (pa_stream_manager_hook_data_for_route*)hook_data;
-        si = pa_hashmap_get(m->stream_infos, route_data->stream_role);
-        avail_devices = (type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
-        route_data->route_type = si->route_type;
-        list_len = pa_idxset_size(avail_devices);
-        device_none = pa_idxset_get_by_data(avail_devices, "none", NULL);
+        if ((si = pa_hashmap_get(m->stream_infos, route_data->stream_role))) {
+            avail_devices = (type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
+            route_data->route_type = si->route_type;
+            list_len = pa_idxset_size(avail_devices);
+            device_none = pa_idxset_get_by_data(avail_devices, "none", NULL);
 
-        if (is_new_data)
-            p_idx = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
-        else
-            p_idx = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
-        if (p_idx && !pa_atou(p_idx, &parent_idx)) {
-            sp = pa_hashmap_get(m->stream_parents, (const void*)parent_idx);
-            if (!sp)
-                pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
-        } else
-           pa_log_warn("  -- could not get the parent id of this stream, but keep going...");
-
-        if (list_len == 0 || device_none) {
-            pa_log_warn("  -- there is no available device, stream_type(%d)", type);
-            break;
-        }
-        route_data->idx_avail_devices = avail_devices;
-        if (si->route_type >= STREAM_ROUTE_TYPE_MANUAL) {
-            if (sp) {
-                route_data->idx_manual_devices = (type == STREAM_SINK_INPUT) ? (sp->idx_route_out_devices) : (sp->idx_route_in_devices);
-                route_data->idx_streams = (type == STREAM_SINK_INPUT) ? (sp->idx_sink_inputs) : (sp->idx_source_outputs);
+            if (list_len == 0 || device_none) {
+                pa_log_warn("  -- there is no available device, stream_type(%d)", type);
+                break;
+            }
+            if (is_new_data)
+                p_idx = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
+            else
+                p_idx = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
+            if (p_idx && !pa_atou(p_idx, &parent_idx)) {
+                sp = pa_hashmap_get(m->stream_parents, (const void*)parent_idx);
+                if (!sp)
+                    pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
             } else
-                pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
-        }
+               pa_log_warn("  -- could not get the parent id of this stream, but keep going...");
+
+            route_data->idx_avail_devices = avail_devices;
+            if (si->route_type >= STREAM_ROUTE_TYPE_MANUAL) {
+                if (sp) {
+                    route_data->idx_manual_devices = (type == STREAM_SINK_INPUT) ? (sp->idx_route_out_devices) : (sp->idx_route_in_devices);
+                    route_data->idx_streams = (type == STREAM_SINK_INPUT) ? (sp->idx_sink_inputs) : (sp->idx_source_outputs);
+                } else
+                    pa_log_warn("  -- failed to get the stream parent of idx(%u)", parent_idx);
+            }
+        } else
+            pa_log_error("  -- could not find (%s)", route_data->stream_role);
+
         break;
     }
     default:
@@ -2975,7 +2984,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                             ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
-                            if (pa_streq(active_dev, device_type))
+                            if (active_dev && pa_streq(active_dev, device_type))
                                 pa_proplist_sets(GET_STREAM_PROPLIST(s, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, ACTIVE_DEV_REMOVED);
                         }
                     }
@@ -2999,7 +3008,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                             ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
-                            if (pa_streq(active_dev, device_type))
+                            if (active_dev && pa_streq(active_dev, device_type))
                                 pa_proplist_sets(GET_STREAM_PROPLIST(s, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, ACTIVE_DEV_REMOVED);
                         }
                     }
@@ -3036,7 +3045,7 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
         return;
     }
     name = pa_proplist_gets(client->proplist, PA_PROP_APPLICATION_NAME);
-    if (strncmp (name, STREAM_MANAGER_CLIENT_NAME, strlen(STREAM_MANAGER_CLIENT_NAME))) {
+    if (name && strncmp (name, STREAM_MANAGER_CLIENT_NAME, strlen(STREAM_MANAGER_CLIENT_NAME))) {
         pa_log_warn(" - this is not a client(%s) that we should take care of, skip it", name);
         return;
     }

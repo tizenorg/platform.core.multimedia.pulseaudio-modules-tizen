@@ -735,7 +735,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         pa_log_debug("[ROUTE][AUTO_ALL] combine_sink_arg1[%s], combine_sink_arg2[%p]", sink->name, combine_sink_arg2);
                     } else if (data->stream_type == STREAM_SINK_INPUT && !combine_sink_arg2) {
                         sink = combine_sink_arg2 = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
-                        if(sink && !pa_streq(sink->name, combine_sink_arg1->name)) {
+                        if (sink && !pa_streq(sink->name, combine_sink_arg1->name)) {
                             pa_log_debug("[ROUTE][AUTO_ALL] combine_sink_arg2[%s]", sink->name);
                             /* load combine sink */
                             if (!u->module_combine_sink) {
@@ -744,13 +744,16 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                 u->module_combine_sink = pa_module_load(u->core, MODULE_COMBINE_SINK, args);
                                 pa_xfree(args);
                             }
-                            sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK);
-                            PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
-                                if (s == data->stream) {
-                                    pa_sink_input_move_to(s, sink, FALSE);
-                                    pa_log_debug("[ROUTE][AUTO_ALL] *** sink-#if 0input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                            if ((sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
+                                PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
+                                    if (s == data->stream) {
+                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** sink-nput(%p,%u) moves to sink(%p,%s)",
+                                                     s, ((pa_sink_input*)s)->index, sink, sink->name);
+                                    }
                                 }
-                            }
+                            } else
+                                pa_log_error("[ROUTE][AUTO_ALL] could not get combine_sink");
                         }
                     } else if (data->stream_type == STREAM_SOURCE_OUTPUT)
                         source = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
@@ -764,17 +767,16 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         /* move sink-inputs/source-outputs if needed */
                         if (data->idx_streams) {
                             PA_IDXSET_FOREACH (s, data->idx_streams, s_idx) { /* data->idx_streams: null_sink */
-                                if ((sink && (sink != ((pa_sink_input*)s)->sink)) || (source && (source != ((pa_source_output*)s)->source))) {
-                                    if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) && (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
-                                        if (data->stream_type == STREAM_SINK_INPUT) {
-                                            pa_sink_input_move_to(s, sink, FALSE);
-                                            pa_log_debug("[ROUTE][AUTO_ALL] *** sink-input(%p,%u) moves to sink(%p,%s)",
-                                                         s, ((pa_sink_input*)s)->index, sink, sink->name);
-                                        } else if (data->stream_type == STREAM_SOURCE_OUTPUT) {
-                                            pa_source_output_move_to(s, source, FALSE);
-                                            pa_log_debug("[ROUTE][AUTO_ALL] *** source-output(%p,%u) moves to source(%p,%s)",
-                                                         s, ((pa_source_output*)s)->index, source, source->name);
-                                        }
+                                if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) &&
+                                    (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
+                                    if ((data->stream_type == STREAM_SINK_INPUT) && (sink && (sink != ((pa_sink_input*)s)->sink))) {
+                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                                     s, ((pa_sink_input*)s)->index, sink, sink->name);
+                                    } else if ((data->stream_type == STREAM_SOURCE_OUTPUT) && (source && (source != ((pa_source_output*)s)->source))) {
+                                        pa_source_output_move_to(s, source, FALSE);
+                                        pa_log_debug("[ROUTE][AUTO_ALL] *** source-output(%p,%u) moves to source(%p,%s)",
+                                                     s, ((pa_source_output*)s)->index, source, source->name);
                                     }
                                 }
                             }
@@ -1619,9 +1621,6 @@ int pa__init(pa_module *m)
     return 0;
 
 fail:
-    if (ma)
-        pa_modargs_free(ma);
-
     pa__done(m);
 
     return -1;

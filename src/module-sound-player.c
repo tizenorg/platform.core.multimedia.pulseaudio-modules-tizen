@@ -251,7 +251,7 @@ static int _sample_play(struct userdata *u, const char *sample_name, const char 
     if (scache_idx != PA_IDXSET_INVALID) {
         pa_log_debug("pa_scache_play_item() start, scache idx[%u] for name[%s]", scache_idx, sample_name);
         /* for more precision, need to update volume value here */
-        if ((ret = pa_scache_play_item(u->module->core, sample_name, sink, PA_VOLUME_NORM, p, &stream_idx) < 0)) {
+        if ((ret = pa_scache_play_item(u->module->core, sample_name, sink, PA_VOLUME_NORM, p, &stream_idx)) < 0) {
             pa_log_error("pa_scache_play_item fail");
             goto exit;
         }

@@ -34,7 +34,7 @@
 #define DEVICE_PROFILE_MAX                  2
 #define DEVICE_STR_MAX                      30
 #define DEVICE_DIRECTION_MAX                3
-#define DEVICE_PARAM_STRING_MAX             50
+#define DEVICE_PARAM_STRING_MAX             150
 #define DEVICE_AVAIL_COND_NUM_MAX           2
 #define DEVICE_AVAIL_COND_STR_MAX           6
 #define DEVICE_FILE_PER_TYPE_MAX            4

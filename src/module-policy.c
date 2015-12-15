@@ -211,9 +211,9 @@ enum signal_index {
 
 /* Macros */
 #define CONVERT_TO_DEVICE_DIRECTION(stream_type)\
-    ((stream_type==STREAM_SINK_INPUT)?DM_DEVICE_DIRECTION_OUT:DM_DEVICE_DIRECTION_IN)
+    ((stream_type == STREAM_SINK_INPUT) ? DM_DEVICE_DIRECTION_OUT : DM_DEVICE_DIRECTION_IN)
 #define IS_AVAILABLE_DIRECTION(stream_type, device_direction) \
-    ((stream_type==STREAM_SINK_INPUT)?(device_direction & DM_DEVICE_DIRECTION_OUT):(device_direction & DM_DEVICE_DIRECTION_IN))
+    ((stream_type == STREAM_SINK_INPUT) ? (device_direction & DM_DEVICE_DIRECTION_OUT) : (device_direction & DM_DEVICE_DIRECTION_IN))
 
 /* PCM Dump */
 #define PA_DUMP_INI_DEFAULT_PATH                "/usr/etc/mmfw_audio_pcm_dump.ini"
@@ -441,7 +441,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                     pa_log_warn("  -- could not get combine_sink_arg1");
                             } else if (!combine_sink_arg2) {
                                 sink = combine_sink_arg2 = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
-                                if(sink && !pa_streq(sink->name, combine_sink_arg1->name)) {
+                                if (sink && !pa_streq(sink->name, combine_sink_arg1->name)) {
                                     pa_log_debug("  -- combine_sink_arg2[%s]", sink->name);
                                     /* load combine sink */
                                     if (!u->module_combine_sink_for_ex) {
@@ -451,7 +451,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                         pa_xfree(args);
                                     }
                                     sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK);
-                                    PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
+                                    PA_IDXSET_FOREACH(s, combine_sink_arg1->inputs, s_idx) {
                                         if (s == data->stream) {
                                             pa_sink_input_move_to(s, sink, FALSE);
                                             pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
@@ -459,7 +459,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                         }
                                     }
                                 } else if (!sink) {
-                                    pa_log_warn ("  -- could not get combine_sink_arg2");
+                                    pa_log_warn("  -- could not get combine_sink_arg2");
                                 }
                             }
                             if (data->origins_from_new_data)
@@ -478,7 +478,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                         pa_source_output_move_to(data->stream, source, FALSE);
                                 }
                             } else
-                                pa_log_warn ("  -- could not get source");
+                                pa_log_warn("  -- could not get source");
                         }
                     }
                 }
@@ -486,7 +486,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
         }
     }
 
-    if ((data->stream_type==STREAM_SINK_INPUT)?!(*(data->proper_sink)):!(*(data->proper_source))) {
+    if ((data->stream_type == STREAM_SINK_INPUT) ? !(*(data->proper_sink)) : !(*(data->proper_source))) {
         pa_log_warn("[SELECT] could not find a proper sink/source, set it to null sink/source");
         if (data->stream_type == STREAM_SINK_INPUT)
             *(data->proper_sink) = null_sink;
@@ -629,17 +629,17 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         }
         route_info.num_of_devices = 1;
         route_info.device_infos = pa_xmalloc0(sizeof(hal_device_info)*route_info.num_of_devices);
-        route_info.device_infos[0].direction = (data->stream_type==STREAM_SINK_INPUT)?DIRECTION_OUT:DIRECTION_IN;
+        route_info.device_infos[0].direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
 
         /* unload combine sink */
-        if (data->stream_type==STREAM_SINK_INPUT && u->module_combine_sink) {
+        if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
             pa_log_info("[ROUTE][RESET] unload module[%s]", SINK_NAME_COMBINED);
             combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK);
             null_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_NULL, PA_NAMEREG_SINK);
             if (!combine_sink || !null_sink)
                 pa_log_error("[ROUTE][RESET] could not get combine_sink(%p) or null_sink(%p)", combine_sink, null_sink);
             else {
-                PA_IDXSET_FOREACH (s, combine_sink->inputs, s_idx) {
+                PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                     pa_sink_input_move_to(s, null_sink, FALSE);
                     pa_log_debug("[ROUTE][RESET] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
                 }
@@ -669,7 +669,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         pa_log_debug("  ** found a matched device: type[%-16s], direction[0x%x]", dm_device_type, dm_device_direction);
                         use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
                         if (use_internal_codec) {
-                            hal_direction = (data->stream_type==STREAM_SINK_INPUT)?DIRECTION_OUT:DIRECTION_IN;
+                            hal_direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
                             route_info.num_of_devices++;
                             route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                             route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
@@ -690,7 +690,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 if (data->route_type == STREAM_ROUTE_TYPE_AUTO) {
                     /* check if this device uses internal codec */
                     use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
-                    if(use_internal_codec) {
+                    if (use_internal_codec) {
                         /* set other device's state to deactivated */
                         PA_IDXSET_FOREACH(_device, conn_devices, conn_idx) {
                             if (device == _device)
@@ -708,9 +708,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
 
                     /* unload combine sink */
-                    if (data->stream_type==STREAM_SINK_INPUT && u->module_combine_sink) {
+                    if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
                         if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
-                            PA_IDXSET_FOREACH (s, combine_sink->inputs, s_idx) {
+                            PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                                 pa_sink_input_move_to(s, sink, FALSE);
                                 pa_log_debug("[ROUTE][AUTO] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
                             }
@@ -745,7 +745,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                 pa_xfree(args);
                             }
                             if ((sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
-                                PA_IDXSET_FOREACH (s, combine_sink_arg1->inputs, s_idx) {
+                                PA_IDXSET_FOREACH(s, combine_sink_arg1->inputs, s_idx) {
                                     if (s == data->stream) {
                                         pa_sink_input_move_to(s, sink, FALSE);
                                         pa_log_debug("[ROUTE][AUTO_ALL] *** sink-nput(%p,%u) moves to sink(%p,%s)",
@@ -766,7 +766,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     } else {
                         /* move sink-inputs/source-outputs if needed */
                         if (data->idx_streams) {
-                            PA_IDXSET_FOREACH (s, data->idx_streams, s_idx) { /* data->idx_streams: null_sink */
+                            PA_IDXSET_FOREACH(s, data->idx_streams, s_idx) { /* data->idx_streams: null_sink */
                                 if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) &&
                                     (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
                                     if ((data->stream_type == STREAM_SINK_INPUT) && (sink && (sink != ((pa_sink_input*)s)->sink))) {
@@ -810,7 +810,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 dm_device_id = pa_device_manager_get_device_id(latest_device);
                 use_internal_codec = pa_device_manager_is_device_use_internal_codec(latest_device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
                 if (use_internal_codec) {
-                    hal_direction = (data->stream_type==STREAM_SINK_INPUT)?DIRECTION_OUT:DIRECTION_IN;
+                    hal_direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
                     route_info.num_of_devices++;
                     route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                     route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
@@ -838,7 +838,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 /* unload combine sink */
                 if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
                     if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
-                        PA_IDXSET_FOREACH (s, combine_sink->inputs, s_idx) {
+                        PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                             pa_sink_input_move_to(s, sink, FALSE);
                             pa_log_debug("[ROUTE][AUTO_LAST_CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
                         }
@@ -897,7 +897,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                 route_info.num_of_devices++;
                                 route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                                 route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
-                                route_info.device_infos[route_info.num_of_devices-1].direction = (data->stream_type==STREAM_SINK_INPUT)?DIRECTION_OUT:DIRECTION_IN;
+                                route_info.device_infos[route_info.num_of_devices-1].direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
                                 pa_log_info("  ** found a matched device and set state to ACTIVATED: type[%-16s], direction[0x%x]",
                                     route_info.device_infos[route_info.num_of_devices-1].type, dm_device_direction);
                                 /* set device state to activated */
@@ -917,7 +917,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             else if (data->stream_type == STREAM_SOURCE_OUTPUT)
                 source = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
             if (data->idx_streams) {
-                PA_IDXSET_FOREACH (s, data->idx_streams, idx) {
+                PA_IDXSET_FOREACH(s, data->idx_streams, idx) {
                     if (sink && (sink != ((pa_sink_input*)s)->sink)) {
                         pa_sink_input_move_to(s, sink, FALSE);
                         pa_log_debug("[ROUTE][MANUAL] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
@@ -932,7 +932,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
 
     if (route_info.device_infos) {
         /* send information to HAL to set routing */
-        if(pa_hal_manager_do_route (u->hal_manager, &route_info))
+        if (pa_hal_manager_do_route(u->hal_manager, &route_info))
             pa_log_error("[ROUTE] Failed to pa_hal_manager_do_route()");
         pa_xfree(route_info.device_infos);
     }
@@ -954,7 +954,7 @@ static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manage
     route_option.value = data->value;
 
     /* send information to HAL to update routing option */
-    if(pa_hal_manager_update_route_option (u->hal_manager, &route_option))
+    if (pa_hal_manager_update_route_option(u->hal_manager, &route_option))
         pa_log_error("[ROUTE_OPT] Failed to pa_hal_manager_update_route_option()");
 
     return PA_HOOK_OK;
@@ -1007,7 +1007,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                 if (combine_sink->inputs) {
                     if (!sink)
                         sink = null_sink;
-                    PA_IDXSET_FOREACH (s, combine_sink->inputs, idx) {
+                    PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
                         /* re-route this stream to the remaining device using internal codec */
                         pa_sink_input_move_to(s, sink, FALSE);
                         pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
@@ -1023,7 +1023,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
             /* unload combine sink for external devices */
             if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK))) {
                 if (combine_sink->inputs) {
-                    PA_IDXSET_FOREACH (s, combine_sink->inputs, idx) {
+                    PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
                         pa_sink_input_move_to(s, null_sink, FALSE);
                         pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
                     }
@@ -1208,7 +1208,7 @@ static DBusHandlerResult dbus_filter_audio_handler(DBusConnection *c, DBusMessag
 
     pa_assert(userdata);
 
-    if(dbus_message_get_type(s)!=DBUS_MESSAGE_TYPE_SIGNAL)
+    if (dbus_message_get_type(s) != DBUS_MESSAGE_TYPE_SIGNAL)
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
     pa_log_info("Audio handler received msg");
@@ -1228,7 +1228,7 @@ static DBusHandlerResult dbus_filter_audio_handler(DBusConnection *c, DBusMessag
             DBUS_TYPE_STRING, &arg_s,
             DBUS_TYPE_INVALID)) {
             goto fail;
-        } else{
+        } else {
             _do_something2(arg_s, userdata);
         }
     } else if (dbus_message_is_signal(s, AUDIO_CLIENT_INTERFACE_NAME, "TestSignalFromClient1")) {
@@ -1236,7 +1236,7 @@ static DBusHandlerResult dbus_filter_audio_handler(DBusConnection *c, DBusMessag
             DBUS_TYPE_STRING, &arg_s,
             DBUS_TYPE_INVALID)) {
             goto fail;
-        } else{
+        } else {
             _do_something2(arg_s, userdata);
         }
     } else {
@@ -1278,10 +1278,10 @@ static DBusHandlerResult handle_get_property(DBusConnection *conn, DBusMessage *
                 }
             }
         }
-        else{
+       else {
             pa_log_warn("Not our interface, not handle it");
         }
-    } else{
+    } else {
         pa_log_warn("Wrong Signature");
         pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ss)");
     }
@@ -1305,10 +1305,10 @@ static DBusHandlerResult handle_get_all_property(DBusConnection *conn, DBusMessa
             handle_get_all(conn, msg, userdata);
             return DBUS_HANDLER_RESULT_HANDLED;
         }
-        else{
+       else {
             pa_log_warn("Not our interface, not handle it");
         }
-    } else{
+    } else {
         pa_log_warn("Wrong Signature");
         pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ss)");
     }
@@ -1341,11 +1341,11 @@ static DBusHandlerResult handle_set_property(DBusConnection *conn, DBusMessage *
         if (pa_streq(interface_name, INTERFACE_POLICY)) {
             for (prop_idx = 0; prop_idx < PROPERTY_MAX; prop_idx++) {
                 if (pa_streq(property_name, property_handlers[prop_idx].property_name)) {
-                    if (pa_streq(property_handlers[prop_idx].type,property_sig)) {
+                    if (pa_streq(property_handlers[prop_idx].type, property_sig)) {
                         property_handlers[prop_idx].set_cb(conn, msg, &variant_iter, userdata);
                         return DBUS_HANDLER_RESULT_HANDLED;
                     }
-                    else{
+                   else {
                         pa_log_warn("Wrong Property Signature");
                         pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ssv)");
                     }
@@ -1353,10 +1353,10 @@ static DBusHandlerResult handle_set_property(DBusConnection *conn, DBusMessage *
                 }
             }
         }
-        else{
+       else {
             pa_log_warn("Not our interface, not handle it");
         }
-    } else{
+    } else {
         pa_log_warn("Wrong Signature");
         pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ssv)");
     }
@@ -1373,12 +1373,12 @@ static DBusHandlerResult handle_policy_methods(DBusConnection *conn, DBusMessage
     pa_assert(userdata);
 
     for (method_idx = 0; method_idx < METHOD_HANDLER_MAX; method_idx++) {
-        if (dbus_message_is_method_call(msg, INTERFACE_POLICY, method_handlers[method_idx].method_name )) {
+        if (dbus_message_is_method_call(msg, INTERFACE_POLICY, method_handlers[method_idx].method_name)) {
             if (pa_streq(dbus_message_get_signature(msg), method_arg_signatures[method_idx])) {
                 method_handlers[method_idx].receive_cb(conn, msg, userdata);
                 return DBUS_HANDLER_RESULT_HANDLED;
             }
-            else{
+           else {
                 pa_log_warn("Wrong Argument Signature");
                 pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected %s", method_arg_signatures[method_idx]);
                 return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -1429,13 +1429,13 @@ static DBusHandlerResult method_call_handler(DBusConnection *c, DBusMessage *m, 
 
     if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Introspectable", "Introspect")) {
         return handle_introspect(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Get")){
+    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Get")) {
         return handle_get_property(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Set")){
+    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Set")) {
         return  handle_set_property(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "GetAll")){
+    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "GetAll")) {
         return handle_get_all_property(c, m, u);
-    } else{
+    } else {
         return handle_policy_methods(c, m, u);
     }
 
@@ -1451,9 +1451,9 @@ static void endpoint_init(struct userdata *u)
     pa_log_debug("Dbus endpoint init");
 
     if (u && u->dbus_conn) {
-        if(!dbus_connection_register_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH, &vtable_endpoint, u))
+        if (!dbus_connection_register_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH, &vtable_endpoint, u))
             pa_log_error("Failed to register object path");
-    } else{
+    } else {
         pa_log_error("Cannot get dbus connection to register object path");
     }
 }
@@ -1462,9 +1462,9 @@ static void endpoint_done(struct userdata* u)
 {
     pa_log_debug("Dbus endpoint done");
     if (u && u->dbus_conn) {
-        if(!dbus_connection_unregister_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH))
+        if (!dbus_connection_unregister_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH))
             pa_log_error("Failed to unregister object path");
-    } else{
+    } else {
         pa_log_error("Cannot get dbus connection to unregister object path");
     }
 }
@@ -1522,13 +1522,13 @@ static void dbus_init(struct userdata* u)
         }
         pa_log_error("Unable to contact D-Bus system bus: %s: %s", error.name, error.message);
         goto fail;
-    } else{
+    } else {
         pa_log_debug("Got dbus connection");
     }
 
     u->dbus_conn = connection;
 
-    if( watch_signals(u) < 0 )
+    if (watch_signals(u) < 0)
         pa_log_error("dbus watch signals failed");
     else
         pa_log_debug("dbus ready to get signals");
@@ -1548,7 +1548,7 @@ static void dbus_deinit(struct userdata* u)
         endpoint_done(u);
         unwatch_signals(u);
 
-        if (u->dbus_conn){
+        if (u->dbus_conn) {
             pa_dbus_connection_unref(u->dbus_conn);
             u->dbus_conn = NULL;
         }

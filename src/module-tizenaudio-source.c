@@ -114,7 +114,7 @@ static const char* const valid_modargs[] = {
     NULL
 };
 
-static int build_pollfd (struct userdata *u) {
+static int build_pollfd(struct userdata *u) {
     int32_t ret;
     struct pollfd *pollfd;
     int fd = -1;
@@ -471,7 +471,7 @@ int pa__init(pa_module*m) {
     pa_source_set_asyncmsgq(u->source, u->thread_mq.inq);
     pa_source_set_rtpoll(u->source, u->rtpoll);
 
-    unsuspend (u);
+    unsuspend(u);
 
     u->block_usec = BLOCK_USEC;
     u->latency_time = u->block_usec;

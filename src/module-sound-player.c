@@ -79,10 +79,10 @@ enum method_handler_index {
 
 static pa_dbus_arg_info simple_play_args[]    = { { "uri", "s", "in" },
                                                  { "role", "s", "in" },
-                                         { "volume_gain", "s", "in" }};
+                                         { "volume_gain", "s", "in" } };
 static pa_dbus_arg_info sample_play_args[]    = { { "sample_name", "s", "in" },
                                                          { "role", "s", "in" },
-                                                 { "volume_gain", "s", "in" }};
+                                                 { "volume_gain", "s", "in" } };
 
 static const char* signature_args_for_in[] = { "sss", "sss" };
 
@@ -357,7 +357,7 @@ static DBusHandlerResult handle_methods(DBusConnection *conn, DBusMessage *msg, 
     pa_assert(userdata);
 
     for (idx = 0; idx < METHOD_HANDLER_MAX; idx++) {
-        if (dbus_message_is_method_call(msg, SOUND_PLAYER_INTERFACE, method_handlers[idx].method_name )) {
+        if (dbus_message_is_method_call(msg, SOUND_PLAYER_INTERFACE, method_handlers[idx].method_name)) {
             if (pa_streq(dbus_message_get_signature(msg), signature_args_for_in[idx])) {
                 method_handlers[idx].receive_cb(conn, msg, userdata);
                 return DBUS_HANDLER_RESULT_HANDLED;
@@ -412,7 +412,7 @@ static void send_signal_for_eos(struct userdata *u, int32_t stream_idx) {
 }
 #endif
 
-static int init_ipc (struct userdata *u) {
+static int init_ipc(struct userdata *u) {
     int pre_mask;
 #ifdef HAVE_DBUS
 #ifndef USE_DBUS_PROTOCOL
@@ -428,7 +428,7 @@ static int init_ipc (struct userdata *u) {
     pa_log_info("Initialization for IPC");
 
     pre_mask = umask(0);
-    if (mknod(KEYTONE_PATH,S_IFIFO|0660,0)<0)
+    if (mknod(KEYTONE_PATH, S_IFIFO|0660, 0) < 0)
         pa_log_warn("mknod failed. errno=[%d][%s]", errno, strerror(errno));
 
     umask(pre_mask);
@@ -443,11 +443,11 @@ static int init_ipc (struct userdata *u) {
     fcntl(u->fd, F_SETFL, O_NONBLOCK);
 
     /* change access mode so group can use keytone pipe */
-    if (fchmod (u->fd, 0666) == -1)
+    if (fchmod(u->fd, 0666) == -1)
         pa_log_warn("Changing keytone access mode is failed. errno=[%d][%s]", errno, strerror(errno));
 
     /* change group due to security request */
-    if (fchown (u->fd, -1, KEYTONE_GROUP) == -1)
+    if (fchown(u->fd, -1, KEYTONE_GROUP) == -1)
         pa_log_warn("Changing keytone group is failed. errno=[%d][%s]", errno, strerror(errno));
 
     u->io = u->module->core->mainloop->io_new(u->module->core->mainloop, u->fd, PA_IO_EVENT_INPUT|PA_IO_EVENT_HANGUP, io_event_callback, u);
@@ -482,7 +482,7 @@ fail:
     return -1;
 }
 
-static void deinit_ipc (struct userdata *u) {
+static void deinit_ipc(struct userdata *u) {
 
     pa_assert(u);
 
@@ -502,7 +502,7 @@ static void deinit_ipc (struct userdata *u) {
     }
 #else
     if (u->dbus_conn) {
-        if(!dbus_connection_unregister_object_path(pa_dbus_connection_get(u->dbus_conn), SOUND_PLAYER_OBJECT_PATH))
+        if (!dbus_connection_unregister_object_path(pa_dbus_connection_get(u->dbus_conn), SOUND_PLAYER_OBJECT_PATH))
             pa_log_error("Failed to unregister object path");
         u->dbus_conn = NULL;
     }

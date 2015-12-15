@@ -53,7 +53,7 @@ enum gain_type {
 };
 
 /* TODO : after preparing gain map, we can remove it */
-static const char *__get_gain_type_string_by_idx (uint32_t gain_type_idx) {
+static const char *__get_gain_type_string_by_idx(uint32_t gain_type_idx) {
     switch (gain_type_idx) {
     case GAIN_TYPE_DEFAULT:           return "default";
     case GAIN_TYPE_DIALER:            return "dialer";
@@ -70,7 +70,7 @@ static const char *__get_gain_type_string_by_idx (uint32_t gain_type_idx) {
     }
 }
 
-static int load_out_volume_conf_file (pa_stream_manager *m) {
+static int load_out_volume_conf_file(pa_stream_manager *m) {
     int ret = 0;
     dictionary *dict = NULL;
     uint32_t gain_type_idx = 0;
@@ -110,7 +110,7 @@ static int load_out_volume_conf_file (pa_stream_manager *m) {
                     /* convert dB volume to linear volume */
                     double *vol_value = pa_xmalloc0(sizeof(double));
                     *vol_value = 0.0f;
-                    if(strncmp(token, "0", strlen(token)))
+                    if (strncmp(token, "0", strlen(token)))
                         *vol_value = pow(10.0, (atof(token) - 100) / 20.0);
                     if (!v->values[STREAM_DIRECTION_OUT].idx_volume_values)
                         v->values[STREAM_DIRECTION_OUT].idx_volume_values = pa_idxset_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);
@@ -291,7 +291,7 @@ int32_t set_volume_level_by_type(pa_stream_manager *m, stream_type_t stream_type
         if (get_volume_value(m, stream_type, is_hal_volume, volume_type, volume_level, &volume_linear))
             return -1;
 
-        PA_IDXSET_FOREACH(s, stream_type == STREAM_SINK_INPUT?m->core->sink_inputs:m->core->source_outputs, idx) {
+        PA_IDXSET_FOREACH(s, stream_type == STREAM_SINK_INPUT ? m->core->sink_inputs : m->core->source_outputs, idx) {
             if ((volume_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
                 /* Get modifier for gain */
                 modifier_gain = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
@@ -318,7 +318,7 @@ int32_t set_volume_level_by_type(pa_stream_manager *m, stream_type_t stream_type
             }
         }
     } else {
-        PA_IDXSET_FOREACH(s, stream_type == STREAM_SINK_INPUT?m->core->sink_inputs:m->core->source_outputs, idx) {
+        PA_IDXSET_FOREACH(s, stream_type == STREAM_SINK_INPUT ? m->core->sink_inputs : m->core->source_outputs, idx) {
             if ((volume_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
                 /* Get modifier for gain */
                 modifier_gain = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
@@ -436,7 +436,7 @@ int32_t set_volume_level_by_idx(pa_stream_manager *m, stream_type_t stream_type,
     const char *modifier_gain = NULL;
     pa_assert(m);
 
-    s = pa_idxset_get_by_index(stream_type == STREAM_SINK_INPUT?m->core->sink_inputs:m->core->source_outputs, idx);
+    s = pa_idxset_get_by_index(stream_type == STREAM_SINK_INPUT ? m->core->sink_inputs : m->core->source_outputs, idx);
     if ((volume_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE))) {
         /* Get modifier for gain */
         modifier_gain = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
@@ -713,7 +713,7 @@ int32_t set_volume_mute_with_new_data(pa_stream_manager *m, void *stream, stream
     return 0;
 }
 
-static void dump_volumes (pa_stream_manager *m) {
+static void dump_volumes(pa_stream_manager *m) {
     volume_info *s = NULL;
     const char *volume_type = NULL;
     const char *modifier_gain = NULL;
@@ -748,7 +748,7 @@ static void dump_volumes (pa_stream_manager *m) {
     return;
 }
 
-int32_t init_volumes (pa_stream_manager *m) {
+int32_t init_volumes(pa_stream_manager *m) {
     int ret = 0;
     void *state = NULL;
     volume_info *v = NULL;
@@ -790,7 +790,7 @@ int32_t init_volumes (pa_stream_manager *m) {
     return ret;
 }
 
-void deinit_volumes (pa_stream_manager *m) {
+void deinit_volumes(pa_stream_manager *m) {
     volume_info *v = NULL;
     void *state = NULL;
     uint32_t idx = 0;

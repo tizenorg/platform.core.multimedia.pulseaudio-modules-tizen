@@ -27,16 +27,16 @@ typedef enum _stream_direction {
 } stream_direction_t;
 
 #define GET_STREAM_NEW_SAMPLE_SPEC_PTR(stream, type) \
-      (type == STREAM_SINK_INPUT? &(((pa_sink_input_new_data*)stream)->sample_spec) : &(((pa_source_output_new_data*)stream)->sample_spec))
+      (type == STREAM_SINK_INPUT ? &(((pa_sink_input_new_data*)stream)->sample_spec) : &(((pa_source_output_new_data*)stream)->sample_spec))
 
 #define GET_STREAM_NEW_SAMPLE_SPEC(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->sample_spec : ((pa_source_output_new_data*)stream)->sample_spec)
+      (type == STREAM_SINK_INPUT ? ((pa_sink_input_new_data*)stream)->sample_spec : ((pa_source_output_new_data*)stream)->sample_spec)
 
 #define GET_STREAM_SAMPLE_SPEC(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input*)stream)->sample_spec : ((pa_source_output*)stream)->sample_spec)
+      (type == STREAM_SINK_INPUT ? ((pa_sink_input*)stream)->sample_spec : ((pa_source_output*)stream)->sample_spec)
 
 #define IS_FOCUS_ACQUIRED(focus, type) \
-      (type == STREAM_SINK_INPUT? (focus & STREAM_FOCUS_ACQUIRED_PLAYBACK) : (focus & STREAM_FOCUS_ACQUIRED_CAPTURE))
+      (type == STREAM_SINK_INPUT ? (focus & STREAM_FOCUS_ACQUIRED_PLAYBACK) : (focus & STREAM_FOCUS_ACQUIRED_CAPTURE))
 
 typedef struct _stream_info {
     int32_t priority;

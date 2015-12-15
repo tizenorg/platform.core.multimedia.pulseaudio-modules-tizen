@@ -9,10 +9,10 @@
       (route_type_str && !pa_atoi(route_type_str, (int32_t*)&route_type) && (route_type == STREAM_ROUTE_TYPE_AUTO))
 
 #define GET_STREAM_NEW_PROPLIST(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input_new_data*)stream)->proplist : ((pa_source_output_new_data*)stream)->proplist)
+      (type == STREAM_SINK_INPUT ? ((pa_sink_input_new_data*)stream)->proplist : ((pa_source_output_new_data*)stream)->proplist)
 
 #define GET_STREAM_PROPLIST(stream, type) \
-      (type == STREAM_SINK_INPUT? ((pa_sink_input*)stream)->proplist : ((pa_source_output*)stream)->proplist)
+      (type == STREAM_SINK_INPUT ? ((pa_sink_input*)stream)->proplist : ((pa_source_output*)stream)->proplist)
 
 #define SINK_NAME_COMBINED            "sink_combined"
 #define SINK_NAME_NULL                "sink_null"

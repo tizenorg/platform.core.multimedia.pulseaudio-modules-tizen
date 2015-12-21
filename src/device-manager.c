@@ -3183,10 +3183,15 @@ static int handle_device_status_changed(pa_device_manager *dm, const char *devic
     if (pa_streq(device_type, DEVICE_TYPE_AUDIO_JACK)) {
         if (detected_status == EARJACK_DISCONNECTED) {
             handle_device_disconnected(dm, device_type, device_profile, identifier);
+#if 0 /* disable this code temporarily, it will be fixed soon */
         } else if (detected_status == EARJACK_TYPE_SPK_ONLY) {
             handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC);
         } else if (detected_status == EARJACK_TYPE_SPK_WITH_MIC) {
             handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_BOTH_DIREC);
+#else
+        } else if (detected_status == EARJACK_TYPE_SPK_ONLY || detected_status == EARJACK_TYPE_SPK_WITH_MIC) {
+            handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC);
+#endif
         } else {
             pa_log_warn("Got invalid audio-jack detected value");
             return -1;

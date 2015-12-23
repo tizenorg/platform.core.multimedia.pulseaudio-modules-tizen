@@ -3183,15 +3183,10 @@ static int handle_device_status_changed(pa_device_manager *dm, const char *devic
     if (pa_streq(device_type, DEVICE_TYPE_AUDIO_JACK)) {
         if (detected_status == EARJACK_DISCONNECTED) {
             handle_device_disconnected(dm, device_type, device_profile, identifier);
-#if 0 /* disable this code temporarily, it will be fixed soon */
         } else if (detected_status == EARJACK_TYPE_SPK_ONLY) {
             handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC);
         } else if (detected_status == EARJACK_TYPE_SPK_WITH_MIC) {
             handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_BOTH_DIREC);
-#else
-        } else if (detected_status == EARJACK_TYPE_SPK_ONLY || detected_status == EARJACK_TYPE_SPK_WITH_MIC) {
-            handle_device_connected(dm, device_type, device_profile, name, identifier, DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC);
-#endif
         } else {
             pa_log_warn("Got invalid audio-jack detected value");
             return -1;
@@ -4142,6 +4137,11 @@ pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item,
     } else if (direction == DM_DEVICE_DIRECTION_OUT) {
         if ((sink = pa_device_manager_get_sink(device_item, role)))
             use_internal_codec = sink->use_internal_codec;
+    } else if (direction == DM_DEVICE_DIRECTION_BOTH) {
+        if ((sink = pa_device_manager_get_sink(device_item, role)) && (source = pa_device_manager_get_source(device_item, role)))
+            use_internal_codec = sink->use_internal_codec & source->use_internal_codec;
+    } else {
+        pa_log_warn("invalid direction");
     }
 
     return use_internal_codec;

@@ -1741,11 +1741,13 @@ static int device_type_get_direction(pa_device_manager *dm, const char *device_t
         return -1;
     }
 
-
     if (!(type_info = _device_manager_get_type_info(dm->type_infos, device_type, device_profile))) {
         pa_log_error("No type map for %s", device_type);
         return -1;
     }
+
+    if (pa_streq(type_info->type, DEVICE_TYPE_FORWARDING))
+        return DM_DEVICE_DIRECTION_BOTH;
 
     for (d_idx = 0; d_idx < DEVICE_DIRECTION_MAX; d_idx++) {
         if (type_info->direction[d_idx] != DM_DEVICE_DIRECTION_NONE) {
@@ -2085,53 +2087,76 @@ static int device_type_get_pulse_devices(struct device_type_info *type_info, pa_
     pa_assert(capture);
     pa_assert(dm);
 
-    if (type_info->playback_devices) {
-        *playback = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-        PA_HASHMAP_FOREACH_KEY(device_string, type_info->playback_devices, state, role) {
-            if (!(file_info = _device_manager_get_file_info(dm->file_map->playback, device_string))) {
-                pa_log_error("No playback file map for '%s'", device_string);
-                goto failed;
-            }
+    if (pa_streq(type_info->type, DEVICE_TYPE_FORWARDING)) {
+        dm_device *device_item;
+        dm_device_profile *device_profile;
+        pa_sink *spk_sink;
 
-            if (!(params = pa_hashmap_get(file_info->roles, role))) {
-                pa_log_error("No params for '%s:%s'", device_string, role);
-                goto failed;
-            }
+        /* Let sink of forwading device same as speaker,
+         * source of forwarding device will be monitor of that sink */
+        if (!(device_item = _device_manager_get_device(dm->device_list, DEVICE_TYPE_SPEAKER))) {
+            pa_log_error("get speaker item failed");
+            goto failed;
+        } else if (!(device_profile = _device_item_get_profile(device_item, NULL))) {
+            pa_log_error("get speaker profile failed");
+            goto failed;
+        } else if (!(spk_sink = _device_profile_get_sink(device_profile, DEVICE_ROLE_NORMAL)) || !(spk_sink->monitor_source)) {
+            pa_log_error("get speaker sink and monitor source failed");
+            goto failed;
+        } else {
+            *playback = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
+            *capture = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
+            pa_hashmap_put(*playback, (void *)DEVICE_ROLE_NORMAL, spk_sink);
+            pa_hashmap_put(*capture, (void *)DEVICE_ROLE_NORMAL, spk_sink->monitor_source);
+            ((pa_source*)(spk_sink->monitor_source))->use_internal_codec = TRUE;
+        }
+    } else {
+        if (type_info->playback_devices) {
+            *playback = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
+            PA_HASHMAP_FOREACH_KEY(device_string, type_info->playback_devices, state, role) {
+                if (!(file_info = _device_manager_get_file_info(dm->file_map->playback, device_string))) {
+                    pa_log_error("No playback file map for '%s'", device_string);
+                    goto failed;
+                }
 
-            PA_IDXSET_FOREACH(sink, dm->core->sinks, device_idx) {
-                if (pulse_device_class_is_monitor(sink->proplist))
-                    continue;
-                if (pulse_device_same_device_string(sink, PA_DEVICE_TYPE_SINK, device_string)) {
-                    if (!compare_device_params_with_module_args(sink, PA_DEVICE_TYPE_SINK, params)) {
-                        pa_hashmap_put(*playback, (void *)role, sink);
-                        pa_log_debug("role:%s <- sink:%s", role, sink->name);
-                        break;
+                if (!(params = pa_hashmap_get(file_info->roles, role))) {
+                    pa_log_error("No params for '%s:%s'", device_string, role);
+                    goto failed;
+                }
+
+                PA_IDXSET_FOREACH(sink, dm->core->sinks, device_idx) {
+                    if (pulse_device_class_is_monitor(sink->proplist))
+                        continue;
+                    if (pulse_device_same_device_string(sink, PA_DEVICE_TYPE_SINK, device_string)) {
+                        if (!compare_device_params_with_module_args(sink, PA_DEVICE_TYPE_SINK, params)) {
+                            pa_hashmap_put(*playback, (void *)role, sink);
+                            pa_log_debug("role:%s <- sink:%s", role, sink->name);
+                            break;
+                        }
                     }
                 }
             }
         }
-    }
-
-
-    if (type_info->capture_devices) {
-        *capture = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-        PA_HASHMAP_FOREACH_KEY(device_string, type_info->capture_devices, state, role) {
-            if (!(file_info = _device_manager_get_file_info(dm->file_map->capture, device_string))) {
-                pa_log_error("No capture file map for '%s'", device_string);
-                goto failed;
-            }
-            if (!(params = pa_hashmap_get(file_info->roles, role))) {
-                pa_log_error("No params for '%s:%s'", device_string, role);
-                goto failed;
-            }
-            PA_IDXSET_FOREACH(source, dm->core->sources, device_idx) {
-                if (pulse_device_class_is_monitor(source->proplist))
-                    continue;
-                if (pulse_device_same_device_string(source, PA_DEVICE_TYPE_SOURCE, device_string)) {
-                    if (!compare_device_params_with_module_args(source, PA_DEVICE_TYPE_SOURCE, params)) {
-                        pa_hashmap_put(*capture, (void *)role, source);
-                        pa_log_debug("role:%s <- source:%s", role, source->name);
-                        break;
+        if (type_info->capture_devices) {
+            *capture = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
+            PA_HASHMAP_FOREACH_KEY(device_string, type_info->capture_devices, state, role) {
+                if (!(file_info = _device_manager_get_file_info(dm->file_map->capture, device_string))) {
+                    pa_log_error("No capture file map for '%s'", device_string);
+                    goto failed;
+                }
+                if (!(params = pa_hashmap_get(file_info->roles, role))) {
+                    pa_log_error("No params for '%s:%s'", device_string, role);
+                    goto failed;
+                }
+                PA_IDXSET_FOREACH(source, dm->core->sources, device_idx) {
+                    if (pulse_device_class_is_monitor(source->proplist))
+                        continue;
+                    if (pulse_device_same_device_string(source, PA_DEVICE_TYPE_SOURCE, device_string)) {
+                        if (!compare_device_params_with_module_args(source, PA_DEVICE_TYPE_SOURCE, params)) {
+                            pa_hashmap_put(*capture, (void *)role, source);
+                            pa_log_debug("role:%s <- source:%s", role, source->name);
+                            break;
+                        }
                     }
                 }
             }

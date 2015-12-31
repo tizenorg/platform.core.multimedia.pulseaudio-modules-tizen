@@ -61,6 +61,8 @@ typedef struct _prior_max_priority_stream {
     pa_source_output *source_output;
     pa_bool_t need_to_update_si;
     pa_bool_t need_to_update_so;
+    const char *role_si;
+    const char *role_so;
 } cur_max_priority_stream;
 
 struct _stream_manager {

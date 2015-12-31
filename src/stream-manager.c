@@ -297,7 +297,8 @@ static pa_dbus_interface_info stream_manager_interface_info = {
 
 #endif
 
-#define STREAM_MANAGER_CLIENT_NAME "SOUND_MANAGER_STREAM_INFO"
+#define STREAM_MANAGER_CLIENT_NAME "SOUND_MANAGER_STREAM_INFO" /* The client via sound-manager */
+#define VIRTUAL_STREAM_NAME "VIRTUAL_STREAM" /* The virtual stream created by sound-manager */
 #define DEFAULT_ROLE "media"
 #define SKIP_ROLE "skip"
 #define ACTIVE_DEV_REMOVED "removed"
@@ -405,8 +406,38 @@ typedef struct _stream_route_option {
     int32_t value;
 } stream_route_option;
 
-#define CONVERT_TO_DEVICE_DIRECTION(stream_type)\
+#define CONVERT_TO_DEVICE_DIRECTION(stream_type) \
     ((stream_type == STREAM_SINK_INPUT) ? DM_DEVICE_DIRECTION_OUT : DM_DEVICE_DIRECTION_IN)
+
+#define CONVERT_TO_DEVICE_ROLE(x_stream_role, x_device_role) { \
+    pa_assert(x_stream_role); \
+    if (pa_streq(x_stream_role, STREAM_ROLE_CALL_VOICE)) \
+        x_device_role = DEVICE_ROLE_CALL_VOICE; \
+    else if (pa_streq(x_stream_role, STREAM_ROLE_CALL_VIDEO)) \
+        x_device_role = DEVICE_ROLE_CALL_VIDEO; \
+    else if (pa_streq(x_stream_role, STREAM_ROLE_VOIP)) \
+        x_device_role = DEVICE_ROLE_VOIP; \
+    else \
+        x_device_role = DEVICE_ROLE_NORMAL; \
+} \
+
+#define SET_NEW_DATA_STREAM_TO_NULL_SINK_SOURCE(x_m, x_stream, x_stream_type) { \
+    pa_sink *null_sink; \
+    pa_source *null_source; \
+    if (x_stream_type == STREAM_SINK_INPUT && \
+        (!((pa_sink_input_new_data*)x_stream)->sink)) { \
+        if ((null_sink = (pa_sink*)pa_namereg_get(x_m->core, SINK_NAME_NULL, PA_NAMEREG_SINK))) \
+            ((pa_sink_input_new_data*)x_stream)->sink = null_sink; \
+        else \
+            pa_log_warn("could not get null_sink"); \
+    } else if (x_stream_type == STREAM_SOURCE_OUTPUT && \
+               (!((pa_source_output_new_data*)x_stream)->source)) { \
+        if ((null_source = (pa_source*)pa_namereg_get(x_m->core, SOURCE_NAME_NULL, PA_NAMEREG_SOURCE))) \
+            ((pa_source_output_new_data*)x_stream)->source = null_source; \
+        else \
+            pa_log_warn("could not get null_source"); \
+    } \
+} \
 
 static void do_notify(pa_stream_manager *m, notify_command_type_t command, stream_type_t type, pa_bool_t is_new_data, void *user_data);
 static process_stream_result_t process_stream(pa_stream_manager *m, void *stream, stream_type_t type, process_command_type_t command, pa_bool_t is_new_data);
@@ -477,6 +508,16 @@ static int get_stream_info(pa_stream_manager *m, const char *stream_role, stream
                     pa_log_error("  avail-frameworks, out of range, [%d]", idx);
             }
             info->num_of_frameworks = pa_idxset_size(s->idx_avail_frameworks);
+        } else {
+            /* set variables for error */
+            info->priority = -1;
+            info->num_of_in_devices = info->num_of_out_devices = info->num_of_frameworks = 1;
+            info->volume_types[0] = info->volume_types[1] = dbus_str_none;
+            info->avail_in_devices[0] = dbus_str_none;
+            info->avail_out_devices[0] = dbus_str_none;
+            info->avail_frameworks[0] = dbus_str_none;
+            pa_log_error("could not find the stream_role : %s", stream_role);
+            return -1;
         }
     } else {
         pa_log_error("stream_map is not initialized..");
@@ -552,21 +593,14 @@ static void handle_get_stream_info(DBusConnection *conn, DBusMessage *msg, void 
     memset(&info, 0, sizeof(stream_info_per_type));
     pa_assert_se((reply = dbus_message_new_method_return(msg)));
     dbus_message_iter_init_append(reply, &msg_iter);
-    if (!get_stream_info(m, type, &info)) {
-        pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.priority);
-        pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.route_type);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.volume_types, STREAM_DIRECTION_MAX);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_in_devices, info.num_of_in_devices);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_out_devices, info.num_of_out_devices);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_frameworks, info.num_of_frameworks);
-    } else {
-        pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, 0);
-        pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, 0);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
-        pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, NULL, 0);
-    }
+    get_stream_info(m, type, &info);
+    pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.priority);
+    pa_dbus_append_basic_variant(&msg_iter, DBUS_TYPE_INT32, &info.route_type);
+    pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.volume_types, STREAM_DIRECTION_MAX);
+    pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_in_devices, info.num_of_in_devices);
+    pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_out_devices, info.num_of_out_devices);
+    pa_dbus_append_basic_array_variant(&msg_iter, DBUS_TYPE_STRING, &info.avail_frameworks, info.num_of_frameworks);
+
     pa_assert_se(dbus_connection_send(conn, reply, NULL));
     dbus_message_unref(reply);
 }
@@ -1445,15 +1479,14 @@ static pa_bool_t check_name_to_skip(pa_stream_manager *m, process_command_type_t
     pa_assert(stream);
 
     if (command == PROCESS_COMMAND_PREPARE && is_new_data) {
-        name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
-        if (name) {
+        if ((name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME))) {
             for (i = 0; i < NAME_FOR_SKIP_MAX; i++)
                 if (pa_streq(name, stream_manager_media_names_for_skip[i])) {
                     ret = TRUE;
                     pa_proplist_sets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE, SKIP_ROLE);
                     break;
                 }
-            pa_log_info("name is [%s], skip(%d)", name, ret);
+            pa_log_info("name is [%s], skip(%d) command(%s)", name, ret, process_command_type_str[command]);
         }
     } else {
         if (is_new_data)
@@ -1461,7 +1494,7 @@ static pa_bool_t check_name_to_skip(pa_stream_manager *m, process_command_type_t
         else
             role = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_ROLE);
 
-        if (role && pa_streq(role, "skip"))
+        if (role && pa_streq(role, SKIP_ROLE))
             ret = TRUE;
     }
 
@@ -1499,6 +1532,30 @@ static pa_bool_t check_route_type_to_skip(process_command_type_t command, const 
         ret = TRUE;
     }
     pa_log_debug("command is [%s], skip(%d) for route_type(%d)", process_command_type_str[command], ret, route_type);
+
+    return ret;
+}
+
+static pa_bool_t check_name_is_vstream(pa_stream_manager *m, process_command_type_t command, void *stream, stream_type_t type, pa_bool_t is_new_data) {
+    pa_bool_t ret = FALSE;
+    const char *name = NULL;
+
+    pa_assert(m);
+    pa_assert(stream);
+
+    if (command == PROCESS_COMMAND_PREPARE) {
+        if (is_new_data)
+            name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
+        else
+            name = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
+        if (name) {
+            if (pa_streq(name, VIRTUAL_STREAM_NAME)) {
+                ret = TRUE;
+                pa_log_info("name is [%s]", name);
+            }
+        }
+    } else
+        pa_log_warn("not supported command(%d)", command);
 
     return ret;
 }
@@ -1566,7 +1623,7 @@ static pa_bool_t update_volume_type_of_stream(pa_stream_manager *m, void *stream
 
 static pa_bool_t update_focus_status_of_stream(pa_stream_manager *m, void *stream, stream_type_t type, pa_bool_t is_new_data) {
     const char *p_idx;
-    uint32_t parent_idx;
+    uint32_t parent_idx = 0;
     stream_parent *sp = NULL;
 
     pa_assert(m);
@@ -1577,20 +1634,17 @@ static pa_bool_t update_focus_status_of_stream(pa_stream_manager *m, void *strea
     else
         p_idx = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_PARENT_ID);
     if (p_idx && !pa_atou(p_idx, &parent_idx)) {
-        pa_log_debug("p_idx(%s), idx(%u)", p_idx, parent_idx);
         sp = pa_hashmap_get(m->stream_parents, (const void*)parent_idx);
         if (sp) {
             if (is_new_data)
                 pa_proplist_setf(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_FOCUS_STATUS, "%u", sp->focus_status);
             else
                 pa_proplist_setf(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_FOCUS_STATUS, "%u", sp->focus_status);
+            pa_log_debug("p_idx(%s), idx(%u), focus_status(0x%x, 0x1:playback 0x2:capture 0x3:both)", p_idx, parent_idx, sp->focus_status);
         } else {
             pa_log_error("could not find matching client for this parent_id(%u)", parent_idx);
             return FALSE;
         }
-    } else {
-        pa_log_warn("p_idx(%s) or idx(%u) is not valid", p_idx, parent_idx);
-        return FALSE;
     }
 
     return TRUE;
@@ -1628,10 +1682,9 @@ static pa_bool_t update_stream_parent_info(pa_stream_manager *m, process_command
             pa_log_error("could not find matching client for this parent_id(%u)", parent_idx);
             return FALSE;
         }
-    } else {
-        pa_log_warn("p_idx(%s) or idx(%u) is not valid", p_idx, parent_idx);
+    } else
         return FALSE;
-    }
+
     return TRUE;
 }
 
@@ -1643,6 +1696,7 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
     const char *route_type_str = NULL;
     stream_route_type_t route_type;
     const char *focus_status_str = NULL;
+    const char *active_dev = NULL;
     void *cur_max_stream = NULL;
     void *cur_max_stream_tmp = NULL;
     const int32_t *cur_max_priority = NULL;
@@ -1724,7 +1778,14 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
                         *need_to_update = TRUE;
                         pa_log_debug("update cur_highest to mine(%s)", role);
                     } else {
-                        /* no need to trigger */
+                        /* no need to trigger,
+                         * update active device info if possible */
+                        if ((active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(cur_max_stream, type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV))) {
+                            if (is_new_data)
+                                pa_proplist_sets(GET_STREAM_NEW_PROPLIST(mine, type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, active_dev);
+                            else
+                                pa_proplist_sets(GET_STREAM_PROPLIST(mine, type), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV, active_dev);
+                        }
                         return TRUE;
                     }
                 }
@@ -1773,6 +1834,7 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
                     cur_max_priority = priority;
                     cur_max_focus_status = focus_status;
                     cur_max_stream_tmp = i;
+                    cur_max_role = _role;
                 }
                 if (cur_max_priority && priority) {
                     if (IS_FOCUS_ACQUIRED(cur_max_focus_status, type) ||
@@ -1782,6 +1844,7 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
                         cur_max_priority = priority;
                         cur_max_focus_status = focus_status;
                         cur_max_stream_tmp = i;
+                        cur_max_role = _role;
                     }
                 }
             }
@@ -1789,21 +1852,29 @@ static pa_bool_t update_the_highest_priority_stream(pa_stream_manager *m, proces
             if (cur_max_stream_tmp) {
                 if (type == STREAM_SINK_INPUT) {
                     m->cur_highest_priority.sink_input = cur_max_stream_tmp;
+                    m->cur_highest_priority.role_si = cur_max_role;
                 } else if (type == STREAM_SOURCE_OUTPUT) {
                     m->cur_highest_priority.source_output = cur_max_stream_tmp;
+                    m->cur_highest_priority.role_so = cur_max_role;
                 }
             } else {
                 if (type == STREAM_SINK_INPUT) {
                     m->cur_highest_priority.sink_input = NULL;
+                    m->cur_highest_priority.role_si = NULL;
                 } else if (type == STREAM_SOURCE_OUTPUT) {
                     m->cur_highest_priority.source_output = NULL;
+                    m->cur_highest_priority.role_so = NULL;
                 }
             }
             *need_to_update = TRUE;
-            pa_log_info("need to update: type(%d), cur_highest_priority(sink_input=%p/source_output=%p)",
-                type, (void*)m->cur_highest_priority.sink_input, (void*)m->cur_highest_priority.source_output);
+            pa_log_info("need to update: type(%d), cur_highest_priority(sink_input=%p[%s]/source_output=%p[%s])",
+                        type, (void*)m->cur_highest_priority.sink_input, m->cur_highest_priority.role_si,
+                        (void*)m->cur_highest_priority.source_output, m->cur_highest_priority.role_so);
         } else {
             /* no need to trigger */
+            pa_log_info("no need to update: type(%d), cur_highest_priority(sink_input=%p[%s]/source_output=%p[%s])",
+                        type, (void*)m->cur_highest_priority.sink_input, m->cur_highest_priority.role_si,
+                        (void*)m->cur_highest_priority.source_output, m->cur_highest_priority.role_so);
             return TRUE;
         }
     }
@@ -1928,6 +1999,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                 fill_device_info_to_hook_data(m, &hook_call_select_data, command, type, s, is_new_data);
                 hook_call_select_data.sample_spec = GET_STREAM_NEW_SAMPLE_SPEC(s, type);
                 if (type == STREAM_SINK_INPUT) {
+                    hook_call_select_data.occupying_role = m->cur_highest_priority.role_si;
                     hook_call_select_data.proper_sink = &(((pa_sink_input_new_data*)s)->sink);
                     /* need to check modifier_gain, because we do not skip a stream that is from module-sound-player */
                     modifier_gain = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(s, type), PA_PROP_MEDIA_TIZEN_VOLUME_GAIN_TYPE);
@@ -1937,6 +2009,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                         break;
                     }
                 } else if (type == STREAM_SOURCE_OUTPUT) {
+                    hook_call_select_data.occupying_role = m->cur_highest_priority.role_si;
                     hook_call_select_data.proper_source = &(((pa_source_output_new_data*)s)->source);
                     if (((pa_source_output_new_data*)s)->source) {
                         pa_log_info("  - source(%s) has been already selected, skip selecting source",
@@ -1953,6 +2026,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                 else if (type == STREAM_SOURCE_OUTPUT)
                     hook_call_select_data.proper_source = &(((pa_source_output*)s)->source);
             }
+            CONVERT_TO_DEVICE_ROLE(hook_call_select_data.stream_role, hook_call_select_data.device_role);
             pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_SELECT_INIT_SINK_OR_SOURCE), &hook_call_select_data);
         }
         break;
@@ -1979,6 +2053,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
             }
             hook_call_route_data.stream_type = type;
             hook_call_route_data.stream_role = role;
+            CONVERT_TO_DEVICE_ROLE(hook_call_route_data.stream_role, hook_call_route_data.device_role);
             fill_device_info_to_hook_data(m, &hook_call_route_data, command, type, s, is_new_data);
             if (hook_call_route_data.route_type >= STREAM_ROUTE_TYPE_MANUAL) {
                 if (hook_call_route_data.idx_manual_devices && !pa_idxset_size(hook_call_route_data.idx_manual_devices)) {
@@ -1995,18 +2070,19 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
         s = (type == STREAM_SINK_INPUT) ? (void*)(m->cur_highest_priority.sink_input) :
                                           (void*)(m->cur_highest_priority.source_output);
         if (s) {
-            role = pa_proplist_gets(GET_STREAM_PROPLIST(s, type), PA_PROP_MEDIA_ROLE);
             hook_call_route_data.stream = s;
             hook_call_route_data.stream_type = type;
-            hook_call_route_data.stream_role = role;
+            hook_call_route_data.stream_role = (type == STREAM_SINK_INPUT) ? (m->cur_highest_priority.role_si) :
+                                                                             (m->cur_highest_priority.role_so);
+            CONVERT_TO_DEVICE_ROLE(hook_call_route_data.stream_role, hook_call_route_data.device_role);
             hook_call_route_data.sample_spec = GET_STREAM_SAMPLE_SPEC(s, type);
             hook_call_route_data.idx_streams = (type == STREAM_SINK_INPUT) ? ((pa_sink_input*)s)->sink->inputs :
                                                                              ((pa_source_output*)s)->source->outputs;
             fill_device_info_to_hook_data(m, &hook_call_route_data, command, type, s, is_new_data);
         } else {
             pa_log_info("no stream for this type(%d), need to unset route", type);
+            hook_call_route_data.stream = NULL;
             hook_call_route_data.stream_type = type;
-            hook_call_route_data.stream_role = "reset";
         }
         pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_CHANGE_ROUTE), &hook_call_route_data);
         break;
@@ -2017,8 +2093,8 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
         s = (type == STREAM_SINK_INPUT) ? (void*)(m->cur_highest_priority.sink_input) :
                                           (void*)(m->cur_highest_priority.source_output);
         if (s) {
-            role = pa_proplist_gets(GET_STREAM_PROPLIST(s, type), PA_PROP_MEDIA_ROLE);
-            hook_call_option_data.stream_role = role;
+            hook_call_option_data.stream_role = (type == STREAM_SINK_INPUT) ? (m->cur_highest_priority.role_si) :
+                                                                              (m->cur_highest_priority.role_so);
             hook_call_option_data.name = ((stream_route_option*)user_data)->name;
             hook_call_option_data.value = ((stream_route_option*)user_data)->value;
             pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION), &hook_call_option_data);
@@ -2068,6 +2144,9 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
 
     if (check_name_to_skip(m, command, stream, type, is_new_data)) {
         result = PROCESS_STREAM_RESULT_SKIP;
+        /* set it to null sink/source */
+        if (is_new_data)
+            SET_NEW_DATA_STREAM_TO_NULL_SINK_SOURCE(m, stream, type);
         goto FAILURE;
     }
 
@@ -2139,8 +2218,17 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
             }
         }
 
-        /* notify to select sink or source */
-        do_notify(m, NOTIFY_COMMAND_SELECT_PROPER_SINK_OR_SOURCE_FOR_INIT, type, TRUE, stream);
+        /* check if it is a virtual stream */
+        if (check_name_is_vstream(m, command, stream, type, is_new_data)) {
+            pa_log_debug("skip notifying for selecting sink/source, rather set it to null sink/source");
+            /* set it to null sink/source */
+            if (is_new_data)
+                SET_NEW_DATA_STREAM_TO_NULL_SINK_SOURCE(m, stream, type);
+
+        } else {
+            /* notify to select sink or source */
+            do_notify(m, NOTIFY_COMMAND_SELECT_PROPER_SINK_OR_SOURCE_FOR_INIT, type, TRUE, stream);
+        }
 
     } else if (command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED) {
         if (is_new_data) {
@@ -2197,10 +2285,13 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
                     m->cur_highest_priority.need_to_update_so = TRUE;
             } else {
                 do_notify(m, NOTIFY_COMMAND_CHANGE_ROUTE_START, type, FALSE, stream);
-                if (type == STREAM_SINK_INPUT)
+                if (type == STREAM_SINK_INPUT) {
                     m->cur_highest_priority.sink_input = stream;
-                else
+                    m->cur_highest_priority.role_si = role;
+                } else {
                     m->cur_highest_priority.source_output = stream;
+                    m->cur_highest_priority.role_so = role;
+                }
             }
         }
         if (!is_new_data)
@@ -2320,10 +2411,12 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
                 if (command == PROCESS_COMMAND_ADD_PARENT_ID) {
                     if (type == STREAM_SINK_INPUT && m->cur_highest_priority.need_to_update_si) {
                         m->cur_highest_priority.sink_input = stream;
+                        m->cur_highest_priority.role_si = role;
                         m->cur_highest_priority.need_to_update_si = FALSE;
                     }
                     if (type == STREAM_SOURCE_OUTPUT && m->cur_highest_priority.need_to_update_so) {
                         m->cur_highest_priority.source_output = stream;
+                        m->cur_highest_priority.role_so = role;
                         m->cur_highest_priority.need_to_update_so = FALSE;
                     }
                     do_notify(m, NOTIFY_COMMAND_INFORM_STREAM_CONNECTED, type, FALSE, stream);
@@ -2333,7 +2426,7 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
             /* update parent stream info. */
             ret = update_stream_parent_info(m, command, type, stream);
             if (ret == FALSE) {
-                pa_log_warn("could not update the parent information of this stream");
+                pa_log_debug("could not update the parent information of this stream");
                 //return PROCESS_STREAM_RESULT_STOP;
             }
         }
@@ -3045,7 +3138,7 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
         return;
     }
     name = pa_proplist_gets(client->proplist, PA_PROP_APPLICATION_NAME);
-    if (name && strncmp(name, STREAM_MANAGER_CLIENT_NAME, strlen(STREAM_MANAGER_CLIENT_NAME))) {
+    if (name && !pa_streq(name, STREAM_MANAGER_CLIENT_NAME)) {
         pa_log_warn(" - this is not a client(%s) that we should take care of, skip it", name);
         return;
     }

@@ -15,6 +15,8 @@
 #define DEVICE_PROFILE_BT_A2DP              "a2dp"
 
 #define DEVICE_ROLE_NORMAL                  "normal"
+#define DEVICE_ROLE_CALL_VOICE              "call-voice"
+#define DEVICE_ROLE_CALL_VIDEO              "call-video"
 #define DEVICE_ROLE_VOIP                    "voip"
 #define DEVICE_ROLE_LOW_LATENCY             "low-latency"
 #define DEVICE_ROLE_HIGH_LATENCY            "high-latency"

@@ -14,6 +14,10 @@
 #define GET_STREAM_PROPLIST(stream, type) \
       (type == STREAM_SINK_INPUT ? ((pa_sink_input*)stream)->proplist : ((pa_source_output*)stream)->proplist)
 
+#define STREAM_ROLE_CALL_VOICE        "call-voice"
+#define STREAM_ROLE_CALL_VIDEO        "call-video"
+#define STREAM_ROLE_VOIP              "voip"
+
 #define SINK_NAME_COMBINED            "sink_combined"
 #define SINK_NAME_NULL                "sink_null"
 #define SOURCE_NAME_NULL              "source_null"
@@ -36,6 +40,8 @@ typedef enum stream_route_type {
 typedef struct _hook_call_data_for_select {
     void *stream;
     const char *stream_role;
+    const char *device_role;
+    const char *occupying_role;
     stream_type_t stream_type;
     stream_route_type_t route_type;
     pa_sink **proper_sink;
@@ -49,6 +55,7 @@ typedef struct _hook_call_data_for_select {
 typedef struct _hook_call_data_for_route {
     void *stream;
     const char *stream_role;
+    const char *device_role;
     stream_type_t stream_type;
     stream_route_type_t route_type;
     pa_sink **proper_sink;

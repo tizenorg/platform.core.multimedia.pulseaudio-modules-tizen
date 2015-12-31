@@ -9,6 +9,7 @@
 #include <json.h>
 #include <pulse/proplist.h>
 #include <pulse/util.h>
+#include <pulse/rtclock.h>
 #include <pulsecore/core-subscribe.h>
 #include <pulsecore/core-util.h>
 #include <pulsecore/log.h>
@@ -535,6 +536,10 @@ static pa_bool_t device_role_is_valid(const char *device_role) {
     if (!device_role)
         return FALSE;
     else if (pa_streq(device_role, DEVICE_ROLE_NORMAL))
+        return TRUE;
+    else if (pa_streq(device_role, DEVICE_ROLE_CALL_VOICE))
+        return TRUE;
+    else if (pa_streq(device_role, DEVICE_ROLE_CALL_VIDEO))
         return TRUE;
     else if (pa_streq(device_role, DEVICE_ROLE_VOIP))
         return TRUE;
@@ -4020,6 +4025,7 @@ dm_device* pa_device_manager_get_device_by_id(pa_device_manager *dm, uint32_t id
 
 pa_sink* pa_device_manager_get_sink(dm_device *device_item, const char *role) {
     dm_device_profile *profile_item;
+    pa_sink *sink;
 
     pa_assert(device_item);
     pa_assert(profile_item = _device_item_get_active_profile(device_item));
@@ -4028,12 +4034,19 @@ pa_sink* pa_device_manager_get_sink(dm_device *device_item, const char *role) {
         pa_log_warn("No playback device in %s", device_item->name);
         return NULL;
     }
+    if ((sink = pa_hashmap_get(profile_item->playback_devices, role)))
+        pa_log_debug("Got sink[%s] for [%s] role", sink->name, role);
+    else {
+        sink = pa_hashmap_get(profile_item->playback_devices, DEVICE_ROLE_NORMAL);
+        pa_log_debug("Could not get sink for [%s] role. so get sink[%s] for normal role", role, sink->name);
+    }
 
-    return pa_hashmap_get(profile_item->playback_devices, role);
+    return sink;
 }
 
 pa_source* pa_device_manager_get_source(dm_device *device_item, const char *role) {
     dm_device_profile *profile_item;
+    pa_source *source;
 
     pa_assert(device_item);
     pa_assert(profile_item = _device_item_get_active_profile(device_item));
@@ -4043,7 +4056,14 @@ pa_source* pa_device_manager_get_source(dm_device *device_item, const char *role
         return NULL;
     }
 
-    return pa_hashmap_get(profile_item->capture_devices, role);
+    if ((source = pa_hashmap_get(profile_item->capture_devices, role)))
+        pa_log_debug("Got source[%s] for [%s] role", source->name, role);
+    else {
+        source = pa_hashmap_get(profile_item->capture_devices, DEVICE_ROLE_NORMAL);
+        pa_log_debug("Could not get source for [%s] role. so get source[%s] for normal role", role, source->name);
+    }
+
+    return source;
 }
 
 dm_device* pa_device_manager_get_device_with_sink(pa_sink *sink) {

@@ -30,7 +30,10 @@ typedef enum audio_return {
     AUDIO_ERR_RESOURCE                  = (int32_t)0x80001001,
     AUDIO_ERR_PARAMETER                 = (int32_t)0x80001002,
     AUDIO_ERR_IOCTL                     = (int32_t)0x80001003,
-    AUDIO_ERR_NOT_IMPLEMENTED           = (int32_t)0x80001004,
+    AUDIO_ERR_INVALID_STATE             = (int32_t)0x80001004,
+    AUDIO_ERR_INTERNAL                  = (int32_t)0x80001005,
+
+    AUDIO_ERR_NOT_IMPLEMENTED           = (int32_t)0x80001100,
 } audio_return_t ;
 
 typedef enum audio_direction {
@@ -68,19 +71,24 @@ typedef struct audio_stream_info {
     uint32_t idx;
 } audio_stream_info_t ;
 
+typedef void (*message_cb)(const char *name, int value, void *user_data);
+
 /* Overall */
 typedef struct audio_interface {
     audio_return_t (*init)(void **audio_handle);
     audio_return_t (*deinit)(void *audio_handle);
+    /* Volume */
     audio_return_t (*get_volume_level_max)(void *audio_handle, audio_volume_info_t *info, uint32_t *level);
     audio_return_t (*get_volume_level)(void *audio_handle, audio_volume_info_t *info, uint32_t *level);
     audio_return_t (*set_volume_level)(void *audio_handle, audio_volume_info_t *info, uint32_t level);
     audio_return_t (*get_volume_value)(void *audio_handle, audio_volume_info_t *info, uint32_t level, double *value);
     audio_return_t (*get_volume_mute)(void *audio_handle, audio_volume_info_t *info, uint32_t *mute);
     audio_return_t (*set_volume_mute)(void *audio_handle, audio_volume_info_t *info, uint32_t mute);
+    /* Routing */
     audio_return_t (*do_route)(void *audio_handle, audio_route_info_t *info);
     audio_return_t (*update_route_option)(void *audio_handle, audio_route_option_t *option);
     audio_return_t (*update_stream_connection_info) (void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
+    /* Buffer Attribute */
     audio_return_t (*get_buffer_attr)(void *audio_handle, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                       uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
     /* Interface of PCM device */
@@ -95,6 +103,8 @@ typedef struct audio_interface {
     audio_return_t (*pcm_recover)(void *audio_handle, void *pcm_handle, int revents);
     audio_return_t (*pcm_get_params)(void *audio_handle, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
     audio_return_t (*pcm_set_params)(void *audio_handle, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
+    /* Message callback */
+    audio_return_t (*set_message_cb)(void *audio_handle, message_cb callback, void *user_data);
 } audio_interface_t;
 
 audio_return_t audio_init(void **audio_handle);
@@ -121,4 +131,5 @@ audio_return_t audio_pcm_get_fd(void *audio_handle, void *pcm_handle, int *fd);
 audio_return_t audio_pcm_recover(void *audio_handle, void *pcm_handle, int revents);
 audio_return_t audio_pcm_get_params(void *audio_handle, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
 audio_return_t audio_pcm_set_params(void *audio_handle, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
+audio_return_t audio_set_message_cb(void *audio_handle, message_cb callback, void *user_data);
 #endif

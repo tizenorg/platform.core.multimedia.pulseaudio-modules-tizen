@@ -49,6 +49,7 @@
 #define ARR_ARG_MAX  32
 #define STREAM_MANAGER_OBJECT_PATH "/org/pulseaudio/StreamManager"
 #define STREAM_MANAGER_INTERFACE   "org.pulseaudio.StreamManager"
+/* method */
 #define STREAM_MANAGER_METHOD_NAME_GET_STREAM_INFO            "GetStreamInfo"
 #define STREAM_MANAGER_METHOD_NAME_GET_STREAM_LIST            "GetStreamList"
 #define STREAM_MANAGER_METHOD_NAME_SET_STREAM_ROUTE_DEVICES   "SetStreamRouteDevices"
@@ -60,6 +61,9 @@
 #define STREAM_MANAGER_METHOD_NAME_GET_VOLUME_MUTE            "GetVolumeMute"
 #define STREAM_MANAGER_METHOD_NAME_GET_CURRENT_VOLUME_TYPE    "GetCurrentVolumeType" /* the type that belongs to the stream of the current max priority */
 #define STREAM_MANAGER_METHOD_NAME_UPDATE_FOCUS_STATUS        "UpdateFocusStatus"
+/* signal */
+#define STREAM_MANAGER_SIGNAL_NAME_VOLUME_CHANGED             "VolumeChanged"
+#define STREAM_MANAGER_SIGNAL_NAME_COMMAND                    "Command"
 
 static DBusHandlerResult method_handler_for_vt(DBusConnection *c, DBusMessage *m, void *userdata);
 static DBusHandlerResult handle_introspect(DBusConnection *conn, DBusMessage *msg, void *userdata);
@@ -75,6 +79,8 @@ static void handle_set_volume_mute(DBusConnection *conn, DBusMessage *msg, void 
 static void handle_get_volume_mute(DBusConnection *conn, DBusMessage *msg, void *userdata);
 static void handle_get_current_volume_type(DBusConnection *conn, DBusMessage *msg, void *userdata);
 static void handle_update_focus_status(DBusConnection *conn, DBusMessage *msg, void *userdata);
+static void send_volume_changed_signal(DBusConnection *conn, const char *direction, const char *volume_type, const uint32_t volume_level);
+static void send_command_signal(DBusConnection *conn, const char *name, int value);
 
 enum method_handler_index {
     METHOD_HANDLER_GET_STREAM_INFO,
@@ -286,6 +292,15 @@ static pa_dbus_interface_info stream_manager_interface_info = {
     "   <arg name=\"focus_status\" direction=\"in\" type=\"u\"/>"            \
     "   <arg name=\"ret_msg\" direction=\"out\" type=\"s\"/>"                \
     "  </method>"                                                            \
+    "  <signal name=\"STREAM_MANAGER_SIGNAL_NAME_VOLUME_CHANGED\">\n"        \
+    "   <arg name=\"direction\" type=\"s\"/>\n"                              \
+    "   <arg name=\"volume_type\" type=\"s\"/>\n"                            \
+    "   <arg name=\"volume_level\" type=\"u\"/>\n"                           \
+    "  </signal>\n"                                                          \
+    "  <signal name=\"STREAM_MANAGER_SIGNAL_NAME_COMMAND\">\n"               \
+    "   <arg name=\"name\" type=\"s\"/>\n"                                   \
+    "   <arg name=\"value\" type=\"i\"/>\n"                                  \
+    "  </signal>\n"                                                          \
     " </interface>"                                                          \
     " <interface name=\"org.freedesktop.DBus.Introspectable\">"              \
     "  <method name=\"Introspect\">"                                         \
@@ -797,27 +812,6 @@ static void handle_set_stream_route_option(DBusConnection *conn, DBusMessage *ms
     return;
 }
 
-static void send_volume_changed_signal(DBusConnection *conn, const char *direction, const char *volume_type, const uint32_t volume_level) {
-    DBusMessage *signal_msg;
-    DBusMessageIter msg_iter;
-
-    pa_assert(conn);
-    pa_assert(volume_type);
-
-    pa_log_debug("Send volume changed signal : direction %s, type %s, level %d", direction, volume_type, volume_level);
-
-    pa_assert_se(signal_msg = dbus_message_new_signal(STREAM_MANAGER_OBJECT_PATH, STREAM_MANAGER_INTERFACE, "VolumeChanged"));
-    dbus_message_iter_init_append(signal_msg, &msg_iter);
-
-    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_STRING, &direction);
-    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_STRING, &volume_type);
-    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_UINT32, &volume_level);
-
-    pa_assert_se(dbus_connection_send(conn, signal_msg, NULL));
-    dbus_message_unref(signal_msg);
-    return;
-}
-
 static void handle_set_volume_level(DBusConnection *conn, DBusMessage *msg, void *userdata) {
     const char *direction = NULL;
     const char *type = NULL;
@@ -1189,6 +1183,46 @@ static DBusHandlerResult method_handler_for_vt(DBusConnection *c, DBusMessage *m
     }
 
     return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+static void send_volume_changed_signal(DBusConnection *conn, const char *direction, const char *volume_type, const uint32_t volume_level) {
+    DBusMessage *signal_msg;
+    DBusMessageIter msg_iter;
+
+    pa_assert(conn);
+    pa_assert(volume_type);
+
+    pa_log_debug("Send volume changed signal: direction(%s), type(%s), level(%d)", direction, volume_type, volume_level);
+
+    pa_assert_se(signal_msg = dbus_message_new_signal(STREAM_MANAGER_OBJECT_PATH, STREAM_MANAGER_INTERFACE, STREAM_MANAGER_SIGNAL_NAME_VOLUME_CHANGED));
+    dbus_message_iter_init_append(signal_msg, &msg_iter);
+
+    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_STRING, &direction);
+    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_STRING, &volume_type);
+    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_UINT32, &volume_level);
+
+    pa_assert_se(dbus_connection_send(conn, signal_msg, NULL));
+    dbus_message_unref(signal_msg);
+    return;
+}
+
+static void send_command_signal(DBusConnection *conn, const char *name, int value) {
+    DBusMessage *signal_msg;
+    DBusMessageIter msg_iter;
+
+    pa_assert(conn);
+    pa_assert(name);
+
+    pa_log_debug("Send command signal: name(%s), value(%d)", name, value);
+
+    pa_assert_se(signal_msg = dbus_message_new_signal(STREAM_MANAGER_OBJECT_PATH, STREAM_MANAGER_INTERFACE, STREAM_MANAGER_SIGNAL_NAME_COMMAND));
+    dbus_message_iter_init_append(signal_msg, &msg_iter);
+
+    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_STRING, &name);
+    dbus_message_iter_append_basic(&msg_iter, DBUS_TYPE_INT32, &value);
+
+    pa_assert_se(dbus_connection_send(conn, signal_msg, NULL));
+    dbus_message_unref(signal_msg);
 }
 #endif
 
@@ -3128,6 +3162,7 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
     const char *name = NULL;
     uint32_t *device_id = NULL;
     uint32_t _idx = 0;
+
     pa_core_assert_ref(core);
     pa_assert(m);
 
@@ -3176,11 +3211,25 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
     }
 }
 
-static int init_ipc(pa_stream_manager *m) {
+static void message_cb(const char *name, int value, void *user_data) {
+    pa_stream_manager *m;
+
+    pa_assert(user_data);
+
+    m = (pa_stream_manager*)user_data;
+
 #ifdef HAVE_DBUS
-#ifdef USE_DBUS_PROTOCOL
+    send_command_signal(pa_dbus_connection_get(m->dbus_conn), name, value);
+#endif
+
+    return;
+}
+
+static int init_ipc(pa_stream_manager *m) {
     pa_assert(m);
     pa_log_info("Initialization for IPC");
+#ifdef HAVE_DBUS
+#ifdef USE_DBUS_PROTOCOL
     m->dbus_protocol = pa_dbus_protocol_get(m->core);
     pa_assert_se(pa_dbus_protocol_add_interface(m->dbus_protocol, STREAM_MANAGER_OBJECT_PATH, &stream_manager_interface_info, m) >= 0);
     pa_assert_se(pa_dbus_protocol_register_extension(m->dbus_protocol, STREAM_MANAGER_INTERFACE) >= 0);
@@ -3190,9 +3239,6 @@ static int init_ipc(pa_stream_manager *m) {
     static const DBusObjectPathVTable vtable = {
         .message_function = method_handler_for_vt,
     };
-
-    pa_assert(m);
-    pa_log_info("Initialization for IPC");
 
     dbus_error_init(&err);
 
@@ -3276,6 +3322,8 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m->core = c;
 
     m->hal = pa_hal_manager_get(c);
+    if (pa_hal_manager_set_messsage_callback(m->hal, message_cb, m))
+        pa_log_warn("skip set message callback");
 
     m->dm = pa_device_manager_get(c);
 #ifdef HAVE_DBUS

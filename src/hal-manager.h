@@ -43,6 +43,8 @@ typedef struct _hal_stream_info {
 
 typedef void* pcm_handle;
 
+typedef void (*hal_message_callback)(const char *name, int value, void *user_data);
+
 pa_hal_manager* pa_hal_manager_get(pa_core *core);
 pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h);
 void pa_hal_manager_unref(pa_hal_manager *h);
@@ -67,5 +69,6 @@ int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd);
 int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err);
 int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
 int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
+int32_t pa_hal_manager_set_messsage_callback(pa_hal_manager *h, hal_message_callback callback, void *user_data);
 
 #endif

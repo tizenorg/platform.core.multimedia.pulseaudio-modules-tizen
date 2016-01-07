@@ -79,6 +79,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core) {
         h->intf.pcm_recover = dlsym(h->dl_handle, "audio_pcm_recover");
         h->intf.pcm_get_params = dlsym(h->dl_handle, "audio_pcm_get_params");
         h->intf.pcm_set_params = dlsym(h->dl_handle, "audio_pcm_set_params");
+        h->intf.set_message_cb = dlsym(h->dl_handle, "audio_set_message_cb");
         if (h->intf.init) {
             if (h->intf.init(&h->ah_handle) != AUDIO_RET_OK)
                 pa_log_error("hal_manager init failed");
@@ -467,5 +468,23 @@ int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint3
         pa_log_error("pcm_set_params returns error:0x%x", hal_ret);
         ret = -1;
     }
+    return ret;
+}
+
+int32_t pa_hal_manager_set_messsage_callback(pa_hal_manager *h, hal_message_callback callback, void *user_data) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(callback);
+
+    if (h->intf.set_message_cb == NULL) {
+        pa_log_warn("there may be no message from this audio hal");
+    } else if (AUDIO_IS_ERROR((hal_ret = h->intf.set_message_cb(h->ah_handle, (message_cb)callback, user_data)))) {
+        pa_log_error("set_message_cb returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+    pa_log_warn("set message cb is success, cb(%p)", h->intf.set_message_cb);
+
     return ret;
 }

@@ -924,30 +924,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             }
         }
     }
-    /* move streams to a proper sink/source if needed.
-     * some targets use several pcm card as per their purpose.
-     * e.g) using a specific pcm card during voice call.
-     * here is the code for roll-back. */
-    if (device && data->stream && !data->origins_from_new_data &&
-        data->route_type != STREAM_ROUTE_TYPE_MANUAL) {
-        if (data->stream_type == STREAM_SINK_INPUT)
-            sink = pa_device_manager_get_sink(device, data->device_role);
-        else if (data->stream_type == STREAM_SOURCE_OUTPUT)
-            source = pa_device_manager_get_source(device, data->device_role);
-        if (data->idx_streams) {
-            PA_IDXSET_FOREACH(s, data->idx_streams, idx) {
-                if (sink && sink != ((pa_sink_input*)s)->sink) {
-                    pa_sink_input_move_to(s, sink, FALSE);
-                    pa_log_debug("[ROUTE][ROLLBACK] *** sink-input(%p,%u) moves to sink(%p,%s)",
-                                 s, ((pa_sink_input*)s)->index, sink, sink->name);
-                } else if (source && source != ((pa_source_output*)s)->source) {
-                    pa_source_output_move_to(s, source, FALSE);
-                    pa_log_debug("[ROUTE][ROLLBACK] *** source-output(%p,%u) moves to source(%p,%s)",
-                                 s, ((pa_source_output*)s)->index, source, source->name);
-                }
-            }
-        }
-    }
+
     /* move other streams that are belong to device of NORMAL role
      * to a proper sink/source if needed */
     if (device && data->stream && data->origins_from_new_data &&
@@ -980,6 +957,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                      s, ((pa_source_output*)s)->index, dst_source, dst_source->name);
                     }
                 }
+                /* make sure the previous device is closed */
+                if (data->stream_type == STREAM_SINK_INPUT)
+                    pa_sink_suspend(sink, true, PA_SUSPEND_INTERNAL);
+                else if(data->stream_type == STREAM_SOURCE_OUTPUT)
+                    pa_source_suspend(source, true, PA_SUSPEND_INTERNAL);
             }
         }
     }
@@ -990,6 +972,32 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             pa_log_error("[ROUTE] Failed to pa_hal_manager_do_route()");
         pa_xfree(route_info.device_infos);
     }
+
+    /* move streams to a proper sink/source if needed.
+     * some targets use several pcm card as per their purpose.
+     * e.g) using a specific pcm card during voice call.
+     * here is the code for roll-back. */
+    if (device && data->stream && !data->origins_from_new_data &&
+        data->route_type != STREAM_ROUTE_TYPE_MANUAL) {
+        if (data->stream_type == STREAM_SINK_INPUT)
+            sink = pa_device_manager_get_sink(device, data->device_role);
+        else if (data->stream_type == STREAM_SOURCE_OUTPUT)
+            source = pa_device_manager_get_source(device, data->device_role);
+        if (data->idx_streams) {
+            PA_IDXSET_FOREACH(s, data->idx_streams, idx) {
+                if (sink && sink != ((pa_sink_input*)s)->sink) {
+                    pa_sink_input_move_to(s, sink, FALSE);
+                    pa_log_debug("[ROUTE][ROLLBACK] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                 s, ((pa_sink_input*)s)->index, sink, sink->name);
+                } else if (source && source != ((pa_source_output*)s)->source) {
+                    pa_source_output_move_to(s, source, FALSE);
+                    pa_log_debug("[ROUTE][ROLLBACK] *** source-output(%p,%u) moves to source(%p,%s)",
+                                 s, ((pa_source_output*)s)->index, source, source->name);
+                }
+            }
+        }
+    }
+
     return PA_HOOK_OK;
 }
 

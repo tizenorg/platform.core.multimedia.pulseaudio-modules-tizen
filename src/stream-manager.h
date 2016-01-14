@@ -17,6 +17,7 @@
 #define STREAM_ROLE_CALL_VOICE        "call-voice"
 #define STREAM_ROLE_CALL_VIDEO        "call-video"
 #define STREAM_ROLE_VOIP              "voip"
+#define STREAM_ROLE_LOOPBACK          "loopback"
 
 #define SINK_NAME_COMBINED            "sink_combined"
 #define SINK_NAME_NULL                "sink_null"

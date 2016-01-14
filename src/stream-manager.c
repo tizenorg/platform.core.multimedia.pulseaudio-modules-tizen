@@ -3216,13 +3216,24 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
 
 static void message_cb(const char *name, int value, void *user_data) {
     pa_stream_manager *m;
+    pa_stream_manager_hook_data_for_option hook_call_option_data;
 
     pa_assert(user_data);
+    pa_assert(name);
 
     m = (pa_stream_manager*)user_data;
 
+    if (strstr(name, STREAM_ROLE_LOOPBACK)) {
+        memset(&hook_call_option_data, 0, sizeof(pa_stream_manager_hook_data_for_option));
+        hook_call_option_data.stream_role = STREAM_ROLE_LOOPBACK;
+        hook_call_option_data.name = name;
+        hook_call_option_data.value = value;
+        pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION), &hook_call_option_data);
+    }
 #ifdef HAVE_DBUS
-    send_command_signal(pa_dbus_connection_get(m->dbus_conn), name, value);
+    else {
+        send_command_signal(pa_dbus_connection_get(m->dbus_conn), name, value);
+    }
 #endif
 
     return;

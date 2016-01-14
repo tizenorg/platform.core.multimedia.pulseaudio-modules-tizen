@@ -205,12 +205,15 @@ enum signal_index {
 #define MODULE_COMBINE_SINK           "module-combine-sink"
 #define MODULE_NULL_SINK              "module-null-sink"
 #define MODULE_NULL_SOURCE            "module-null-source"
+#define MODULE_LOOPBACK               "module-loopback"
 
 /* Name of combine sink for external route type */
 #define SINK_NAME_COMBINED_EX         SINK_NAME_COMBINED"_ex"
 
 /* Macros */
-#define CONVERT_TO_DEVICE_DIRECTION(stream_type)\
+#define CONVERT_TO_HAL_DIRECTION(stream_type) \
+    ((stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN)
+#define CONVERT_TO_DEVICE_DIRECTION(stream_type) \
     ((stream_type == STREAM_SINK_INPUT) ? DM_DEVICE_DIRECTION_OUT : DM_DEVICE_DIRECTION_IN)
 #define IS_AVAILABLE_DIRECTION(stream_type, device_direction) \
     ((stream_type == STREAM_SINK_INPUT) ? (device_direction & DM_DEVICE_DIRECTION_OUT) : (device_direction & DM_DEVICE_DIRECTION_IN))
@@ -249,6 +252,13 @@ struct userdata {
     pa_module *module_combine_sink_for_ex;
     pa_module *module_null_sink;
     pa_module *module_null_source;
+    pa_module *module_loopback;
+    struct {
+        int32_t latency_msec;
+        int32_t adjust_sec;
+        pa_sink *sink;
+        pa_source *source;
+    } loopback_args;
 };
 
 static void __load_dump_config(struct userdata *u)
@@ -524,7 +534,7 @@ static void set_device_state_if_using_internal_codec(dm_device *device, stream_t
 }
 
 /* Open/Close BT SCO if it is possible */
-static int set_bt_sco_state(pa_device_manager *dm, pa_bool_t open) {
+static int update_bt_sco_state(pa_device_manager *dm, pa_bool_t open) {
     dm_device_bt_sco_status_t sco_status;
 
     pa_assert(dm);
@@ -554,6 +564,44 @@ static int set_bt_sco_state(pa_device_manager *dm, pa_bool_t open) {
     }
 
     return 0;
+}
+
+/* Load/Unload module-loopback */
+static void update_loopback_module(struct userdata *u, pa_bool_t load) {
+    char *args = NULL;
+    int32_t latency_msec = 40;
+    int32_t adjust_sec = 3;
+
+    pa_assert(u);
+
+    if (load && u->loopback_args.sink && u->loopback_args.source) {
+        if (!u->loopback_args.latency_msec || !u->loopback_args.latency_msec) {
+            u->loopback_args.latency_msec = latency_msec;
+            u->loopback_args.adjust_sec = adjust_sec;
+        }
+        args = pa_sprintf_malloc("sink=%s source=%s latency_msec=%d adjust_time=%d",
+                                 u->loopback_args.sink->name, u->loopback_args.source->name,
+                                 u->loopback_args.latency_msec, u->loopback_args.adjust_sec);
+        if (!u->module_loopback) {
+            u->module_loopback = pa_module_load(u->core, MODULE_LOOPBACK, args);
+        } else {
+            pa_module_unload(u->core, u->module_loopback, TRUE);
+            u->module_loopback = pa_module_load(u->core, MODULE_LOOPBACK, args);
+        }
+        pa_log_info("  -- load module-loopback with (%s)", args);
+        pa_xfree(args);
+
+    } else if (!load) {
+        if (u->module_loopback) {
+            pa_module_unload(u->core, u->module_loopback, TRUE);
+            u->module_loopback = NULL;
+            u->loopback_args.sink = NULL;
+            u->loopback_args.source = NULL;
+            pa_log_info("  -- unload module-loopback", args);
+        }
+    } else {
+        pa_log_error("  -- failed to update loopback module");
+    }
 }
 
 /* Change the route setting according to the data from argument.
@@ -620,13 +668,21 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
     pa_assert(u);
 
     pa_log_info("[ROUTE] route_change_hook_cb is called. (%p), stream_type(%d), stream_role(%s), route_type(%d)",
-            data, data->stream_type, data->stream_role, data->route_type);
+                data, data->stream_type, data->stream_role, data->route_type);
 
     route_info.role = data->stream_role;
 
     if (data->stream == NULL) {
+        /* unload module-loopback */
+        if (u->module_loopback) {
+            if (data->stream_type == STREAM_SINK_INPUT && u->loopback_args.sink->use_internal_codec) {
+                update_loopback_module(u, FALSE);
+            } else if (data->stream_type == STREAM_SOURCE_OUTPUT && u->loopback_args.source->use_internal_codec) {
+                update_loopback_module(u, FALSE);
+            }
+        }
         /* update BT SCO: close */
-        set_bt_sco_state(u->device_manager, FALSE);
+        update_bt_sco_state(u->device_manager, FALSE);
 
         /* get current connected devices */
         conn_devices = pa_device_manager_get_device_list(u->device_manager);
@@ -636,14 +692,15 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             dm_device_state = pa_device_manager_get_device_state(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type));
             dm_device_direction = pa_device_manager_get_device_direction(device);
             if (dm_device_state == DM_DEVICE_STATE_ACTIVATED && IS_AVAILABLE_DIRECTION(data->stream_type, dm_device_direction)) {
-                pa_log_info("[ROUTE][RESET] found a matched device and set state to DE-ACTIVATED: type[%s], direction[0x%x]", dm_device_type, dm_device_direction);
+                pa_log_info("[ROUTE][RESET] found a matched device and set state to DE-ACTIVATED: type[%s], direction[0x%x]",
+                            dm_device_type, dm_device_direction);
                 set_device_state_if_using_internal_codec(device, data->stream_type, DM_DEVICE_STATE_DEACTIVATED);
             }
         }
         route_info.role = "reset";
         route_info.num_of_devices = 1;
         route_info.device_infos = pa_xmalloc0(sizeof(hal_device_info)*route_info.num_of_devices);
-        route_info.device_infos[0].direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
+        route_info.device_infos[0].direction = CONVERT_TO_HAL_DIRECTION(data->stream_type);
 
         /* unload combine sink */
         if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
@@ -655,7 +712,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             else {
                 PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                     pa_sink_input_move_to(s, null_sink, FALSE);
-                    pa_log_debug("[ROUTE][RESET] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
+                    pa_log_debug("[ROUTE][RESET] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                 s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
                 }
                 pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
             }
@@ -664,8 +722,16 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         }
 
     } else if ((data->route_type <= STREAM_ROUTE_TYPE_AUTO_ALL) && data->idx_avail_devices) {
+        /* unload module-loopback */
+        if (u->module_loopback) {
+            if (data->stream_type == STREAM_SINK_INPUT && u->loopback_args.sink->use_internal_codec) {
+                update_loopback_module(u, FALSE);
+            } else if (data->stream_type == STREAM_SOURCE_OUTPUT && u->loopback_args.source->use_internal_codec) {
+                update_loopback_module(u, FALSE);
+            }
+        }
         /* update BT SCO: close */
-        set_bt_sco_state(u->device_manager, FALSE);
+        update_bt_sco_state(u->device_manager, FALSE);
 
         /* get current connected devices */
         conn_devices = pa_device_manager_get_device_list(u->device_manager);
@@ -681,16 +747,18 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                  dm_device_type, dm_device_subtype, dm_device_direction, dm_device_id);
                     if (pa_streq(device_type, dm_device_type) && IS_AVAILABLE_DIRECTION(data->stream_type, dm_device_direction)) {
                         pa_log_debug("  ** found a matched device: type[%-16s], direction[0x%x]", dm_device_type, dm_device_direction);
-                        use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), data->device_role);
+                        use_internal_codec = pa_device_manager_is_device_use_internal_codec(device,
+                                                                                            CONVERT_TO_DEVICE_DIRECTION(data->stream_type),
+                                                                                            data->device_role);
                         if (use_internal_codec) {
-                            hal_direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
+                            hal_direction = CONVERT_TO_HAL_DIRECTION(data->stream_type);
                             route_info.num_of_devices++;
                             route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                             route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
                             route_info.device_infos[route_info.num_of_devices-1].direction = hal_direction;
                             route_info.device_infos[route_info.num_of_devices-1].id = dm_device_id;
                             pa_log_info("  ** found a matched device and set state to ACTIVATED: type[%-16s], direction[0x%x], id[%u]",
-                            route_info.device_infos[route_info.num_of_devices-1].type, hal_direction, dm_device_id);
+                                        route_info.device_infos[route_info.num_of_devices-1].type, hal_direction, dm_device_id);
                             /* set device state to activated */
                             set_device_state_if_using_internal_codec(device, data->stream_type, DM_DEVICE_STATE_ACTIVATED);
                         } else
@@ -703,7 +771,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
 
                 if (data->route_type == STREAM_ROUTE_TYPE_AUTO) {
                     /* check if this device uses internal codec */
-                    use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
+                    use_internal_codec = pa_device_manager_is_device_use_internal_codec(device,
+                                                                                        CONVERT_TO_DEVICE_DIRECTION(data->stream_type),
+                                                                                        data->device_role);
                     if (use_internal_codec) {
                         /* set other device's state to deactivated */
                         PA_IDXSET_FOREACH(_device, conn_devices, conn_idx) {
@@ -726,7 +796,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
                             PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                                 pa_sink_input_move_to(s, sink, FALSE);
-                                pa_log_debug("[ROUTE][AUTO] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                                pa_log_debug("[ROUTE][AUTO] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                             s, ((pa_sink_input*)s)->index, sink, sink->name);
                             }
                             pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
                         } else
@@ -822,9 +893,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             if (latest_device) {
                 dm_device_type = pa_device_manager_get_device_type(latest_device);
                 dm_device_id = pa_device_manager_get_device_id(latest_device);
-                use_internal_codec = pa_device_manager_is_device_use_internal_codec(latest_device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), data->device_role);
+                use_internal_codec = pa_device_manager_is_device_use_internal_codec(latest_device,
+                                                                                    CONVERT_TO_DEVICE_DIRECTION(data->stream_type),
+                                                                                    data->device_role);
                 if (use_internal_codec) {
-                    hal_direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
+                    hal_direction = CONVERT_TO_HAL_DIRECTION(data->stream_type);
                     route_info.num_of_devices++;
                     route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                     route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
@@ -854,7 +927,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
                         PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
                             pa_sink_input_move_to(s, sink, FALSE);
-                            pa_log_debug("[ROUTE][AUTO_LAST_CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                            pa_log_debug("[ROUTE][AUTO_LAST_CONN] *** sink-input(%p,%u) moves to sink(%p,%s)",
+                                         s, ((pa_sink_input*)s)->index, sink, sink->name);
                         }
                         pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
                     } else
@@ -891,29 +965,40 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 if ((device = pa_device_manager_get_device_by_id(u->device_manager, *device_id))) {
                     dm_device_type = pa_device_manager_get_device_type(device);
                     if (pa_streq(device_type, dm_device_type)) {
-                        pa_log_debug("  ** found a matched device: type[%-16s]", device_type);
-                        if (pa_streq(dm_device_type, DEVICE_TYPE_BT)) {
+                        dm_device_direction = pa_device_manager_get_device_direction(device);
+                        dm_device_subtype = pa_device_manager_get_device_subtype(device);
+                        pa_log_debug("  ** found a matched device: type[%-16s], subtype[%-5s], direction[0x%x]",
+                                     dm_device_type, dm_device_subtype, dm_device_direction);
+                        /* Check for BT SCO in case of call routing */
+                        if (pa_streq(route_info.role, STREAM_ROLE_CALL_VOICE) && pa_streq(dm_device_type, DEVICE_TYPE_BT)) {
                             /* update BT SCO: open */
-                            if (set_bt_sco_state(u->device_manager, TRUE)) {
+                            if (update_bt_sco_state(u->device_manager, TRUE)) {
                                 pa_log_error("  ** could not open BT SCO");
                                 continue;
                             }
                         } else {
                             /* update BT SCO: close */
-                            set_bt_sco_state(u->device_manager, FALSE);
+                            update_bt_sco_state(u->device_manager, FALSE);
                         }
-                        dm_device_direction = pa_device_manager_get_device_direction(device);
-                        dm_device_subtype = pa_device_manager_get_device_subtype(device);
-                        pa_log_debug("  -- manual_device, type[%-16s], subtype[%-5s], direction[0x%x]", dm_device_type, dm_device_subtype, dm_device_direction);
+                        /* Check for in/out devices in case of loopback */
+                        if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
+                            if (dm_device_direction & DM_DEVICE_DIRECTION_OUT)
+                                u->loopback_args.sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
+                            else if (dm_device_direction & DM_DEVICE_DIRECTION_IN)
+                                u->loopback_args.source = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
+                        }
+
                         if (IS_AVAILABLE_DIRECTION(data->stream_type, dm_device_direction)) {
-                            use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, CONVERT_TO_DEVICE_DIRECTION(data->stream_type), DEVICE_ROLE_NORMAL);
+                            use_internal_codec = pa_device_manager_is_device_use_internal_codec(device,
+                                                                                                CONVERT_TO_DEVICE_DIRECTION(data->stream_type),
+                                                                                                DEVICE_ROLE_NORMAL);
                             if (use_internal_codec) {
                                 route_info.num_of_devices++;
                                 route_info.device_infos = pa_xrealloc(route_info.device_infos, sizeof(hal_device_info)*route_info.num_of_devices);
                                 route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
-                                route_info.device_infos[route_info.num_of_devices-1].direction = (data->stream_type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
+                                route_info.device_infos[route_info.num_of_devices-1].direction = CONVERT_TO_HAL_DIRECTION(data->stream_type);
                                 pa_log_info("  ** found a matched device and set state to ACTIVATED: type[%-16s], direction[0x%x]",
-                                    route_info.device_infos[route_info.num_of_devices-1].type, dm_device_direction);
+                                            route_info.device_infos[route_info.num_of_devices-1].type, dm_device_direction);
                                 /* set device state to activated */
                                 set_device_state_if_using_internal_codec(device, data->stream_type, DM_DEVICE_STATE_ACTIVATED);
                             } else
@@ -922,6 +1007,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     }
                 }
             }
+        }
+        if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
+            /* load module-loopback */
+            if (u->loopback_args.sink && u->loopback_args.source)
+                update_loopback_module(u, TRUE);
         }
     }
 
@@ -986,6 +1076,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         if (data->idx_streams) {
             PA_IDXSET_FOREACH(s, data->idx_streams, idx) {
                 if (sink && sink != ((pa_sink_input*)s)->sink) {
+                    if (((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK)) &&
+                        ((pa_sink_input*)s)->sink == combine_sink))
+                        break;
                     pa_sink_input_move_to(s, sink, FALSE);
                     pa_log_debug("[ROUTE][ROLLBACK] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                  s, ((pa_sink_input*)s)->index, sink, sink->name);
@@ -1014,6 +1107,14 @@ static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manage
     route_option.role = data->stream_role;
     route_option.name = data->name;
     route_option.value = data->value;
+
+    if (pa_streq(route_option.role, STREAM_ROLE_LOOPBACK)) {
+        if (pa_streq(route_option.name, MSG_FOR_LOOPBACK_ARG_LATENCY))
+            u->loopback_args.latency_msec = route_option.value;
+        else if (pa_streq(route_option.name, MSG_FOR_LOOPBACK_ARG_ADJUST_TIME))
+            u->loopback_args.adjust_sec = route_option.value;
+        return PA_HOOK_OK;
+    }
 
     /* send information to HAL to update routing option */
     if (pa_hal_manager_update_route_option(u->hal_manager, &route_option))
@@ -1050,51 +1151,62 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     }
 
     use_internal_codec = pa_device_manager_is_device_use_internal_codec(conn->device, device_direction, DEVICE_ROLE_NORMAL);
-    /* update for using combine sink case when external device is disconnected */
-    if (!use_internal_codec && !conn->is_connected && (device_direction & DM_DEVICE_DIRECTION_OUT)) {
-        if (u->module_combine_sink) {
-            /* unload combine sink */
-            if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
-                conn_devices = pa_device_manager_get_device_list(u->device_manager);
-                PA_IDXSET_FOREACH(device, conn_devices, idx) {
-                    device_direction = pa_device_manager_get_device_direction(device);
-                    if (device_direction == DM_DEVICE_DIRECTION_OUT) {
-                        use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, device_direction, DEVICE_ROLE_NORMAL);
-                        if (use_internal_codec) {
-                            sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
-                            break;
+    /* update for unloading modules when external device is disconnected */
+    if (!use_internal_codec && !conn->is_connected) {
+        if (device_direction & DM_DEVICE_DIRECTION_OUT) {
+            if (u->module_combine_sink) {
+                /* unload combine sink */
+                if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
+                    conn_devices = pa_device_manager_get_device_list(u->device_manager);
+                    PA_IDXSET_FOREACH(device, conn_devices, idx) {
+                        device_direction = pa_device_manager_get_device_direction(device);
+                        if (device_direction == DM_DEVICE_DIRECTION_OUT) {
+                            if ((use_internal_codec = pa_device_manager_is_device_use_internal_codec(device, device_direction, DEVICE_ROLE_NORMAL))) {
+                                sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
+                                break;
+                            }
                         }
                     }
-                }
-                if (combine_sink->inputs) {
-                    if (!sink)
-                        sink = null_sink;
-                    PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
-                        /* re-route this stream to the remaining device using internal codec */
-                        pa_sink_input_move_to(s, sink, FALSE);
-                        pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                    if (combine_sink->inputs) {
+                        if (!sink)
+                            sink = null_sink;
+                        PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
+                            /* re-routing this stream to the remaining device using internal codec */
+                            pa_sink_input_move_to(s, sink, FALSE);
+                            pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
+                        }
                     }
-                }
-                pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                pa_module_unload(u->core, u->module_combine_sink, TRUE);
-                u->module_combine_sink = NULL;
-            } else
-                pa_log_error("[CONN] could not get combine_sink");
+                    pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
+                    pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                    u->module_combine_sink = NULL;
+                } else
+                    pa_log_error("[CONN] could not get combine_sink");
+            }
+            if (u->module_combine_sink_for_ex) {
+                /* unload combine sink for external devices */
+                if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK))) {
+                    if (combine_sink->inputs) {
+                        PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
+                            pa_sink_input_move_to(s, null_sink, FALSE);
+                            pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
+                        }
+                    }
+                    pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
+                    pa_module_unload(u->core, u->module_combine_sink_for_ex, TRUE);
+                    u->module_combine_sink_for_ex = NULL;
+                } else
+                    pa_log_error("[CONN] could not get combine_sink_ex");
+            }
+            /* unload loopback module */
+            if (u->module_loopback)
+                if (u->loopback_args.sink == pa_device_manager_get_sink(conn->device, DEVICE_ROLE_NORMAL))
+                    update_loopback_module(u, FALSE);
         }
-        if (u->module_combine_sink_for_ex) {
-            /* unload combine sink for external devices */
-            if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK))) {
-                if (combine_sink->inputs) {
-                    PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
-                        pa_sink_input_move_to(s, null_sink, FALSE);
-                        pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
-                    }
-                }
-                pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                pa_module_unload(u->core, u->module_combine_sink_for_ex, TRUE);
-                u->module_combine_sink_for_ex = NULL;
-            } else
-                pa_log_error("[CONN] could not get combine_sink_ex");
+    if (device_direction & DM_DEVICE_DIRECTION_IN) {
+        /* unload loopback module */
+        if (u->module_loopback)
+            if (u->loopback_args.source == pa_device_manager_get_source(conn->device, DEVICE_ROLE_NORMAL))
+                update_loopback_module(u, FALSE);
         }
     }
 

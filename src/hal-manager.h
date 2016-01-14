@@ -43,6 +43,8 @@ typedef struct _hal_stream_info {
 
 typedef void* pcm_handle;
 
+#define MSG_FOR_LOOPBACK_ARG_LATENCY      "loopback::latency"
+#define MSG_FOR_LOOPBACK_ARG_ADJUST_TIME  "loopback::adjust_time"
 typedef void (*hal_message_callback)(const char *name, int value, void *user_data);
 
 pa_hal_manager* pa_hal_manager_get(pa_core *core);

@@ -231,6 +231,50 @@ enum signal_index {
 #define PA_DUMP_PLAYBACK_RESAMPLER_OUT          0x00000010
 #define PA_DUMP_CAPTURE_ENCODER_IN              0x80000000
 
+typedef enum _device_type {
+    DEVICE_BUILTIN_SPEAKER,
+    DEVICE_BUILTIN_RECEIVER,
+    DEVICE_BUILTIN_MIC,
+    DEVICE_AUDIO_JACK,
+    DEVICE_BT,
+    DEVICE_HDMI,
+    DEVICE_FORWARDING,
+    DEVICE_USB_AUDIO,
+    DEVICE_UNKNOWN,
+    DEVICE_MAX,
+} device_type_t;
+
+enum {
+    CACHED_DEVICE_DIRECTION_IN,
+    CACHED_DEVICE_DIRECTION_OUT,
+    CACHED_DEVICE_DIRECTION_MAX,
+};
+
+int cached_connected_devices[DEVICE_MAX][CACHED_DEVICE_DIRECTION_MAX];
+
+static device_type_t convert_device_type_str(const char *device)
+{
+    if (pa_streq(device, DEVICE_TYPE_SPEAKER))
+        return DEVICE_BUILTIN_SPEAKER;
+    else if (pa_streq(device, DEVICE_TYPE_RECEIVER))
+        return DEVICE_BUILTIN_RECEIVER;
+    else if (pa_streq(device, DEVICE_TYPE_MIC))
+        return DEVICE_BUILTIN_MIC;
+    else if (pa_streq(device, DEVICE_TYPE_AUDIO_JACK))
+        return DEVICE_AUDIO_JACK;
+    else if (pa_streq(device, DEVICE_TYPE_BT))
+        return DEVICE_BT;
+    else if (pa_streq(device, DEVICE_TYPE_HDMI))
+        return DEVICE_HDMI;
+    else if (pa_streq(device, DEVICE_TYPE_FORWARDING))
+        return DEVICE_FORWARDING;
+    else if (pa_streq(device, DEVICE_TYPE_USB_AUDIO))
+        return DEVICE_USB_AUDIO;
+
+    pa_log_warn("unknown device (%s)", device);
+    return DEVICE_UNKNOWN;
+}
+
 struct userdata {
     pa_core *core;
     pa_module *module;
@@ -246,6 +290,7 @@ struct userdata {
         pa_hook_slot *comm_hook_change_route_slot;
         pa_hook_slot *comm_hook_update_route_option_slot;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
+        pa_hook_slot *comm_hook_device_info_changed_slot;
     } communicator;
 
     pa_hal_manager *hal_manager;
@@ -361,6 +406,8 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
         if (data->route_type == STREAM_ROUTE_TYPE_AUTO || data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL) {
             PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
                 pa_log_info("[SELECT][AUTO(_ALL)] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+                if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                    continue;
                 PA_IDXSET_FOREACH(device, conn_devices, conn_idx) {
                     dm_device_type = pa_device_manager_get_device_type(device);
                     dm_device_subtype = pa_device_manager_get_device_subtype(device);
@@ -388,6 +435,8 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
         } else if (data->route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
             PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
                 pa_log_info("[SELECT][AUTO_LAST_CONN] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+                if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                    continue;
                 PA_IDXSET_FOREACH(device, conn_devices, conn_idx) {
                     dm_device_type = pa_device_manager_get_device_type(device);
                     dm_device_subtype = pa_device_manager_get_device_subtype(device);
@@ -419,6 +468,8 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
     } else if (data->route_type == STREAM_ROUTE_TYPE_MANUAL && data->idx_manual_devices && data->idx_avail_devices) {
         PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
             pa_log_info("[SELECT][MANUAL] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+            if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                continue;
             PA_IDXSET_FOREACH(device_id, data->idx_manual_devices, m_idx) {
                 if ((device = pa_device_manager_get_device_by_id(u->device_manager, *device_id))) {
                     dm_device_type = pa_device_manager_get_device_type(device);
@@ -447,6 +498,8 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
     } else if (data->route_type == STREAM_ROUTE_TYPE_MANUAL_EXT && data->idx_manual_devices && data->idx_avail_devices) {
         PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
             pa_log_info("[SELECT][MANUAL_EXT] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+            if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                continue;
             PA_IDXSET_FOREACH(device_id, data->idx_manual_devices, m_idx) {
                 if ((device = pa_device_manager_get_device_by_id(u->device_manager, *device_id))) {
                     dm_device_type = pa_device_manager_get_device_type(device);
@@ -598,7 +651,7 @@ static void update_loopback_module(struct userdata *u, pa_bool_t load) {
             u->module_loopback = NULL;
             u->loopback_args.sink = NULL;
             u->loopback_args.source = NULL;
-            pa_log_info("  -- unload module-loopback", args);
+            pa_log_info("  -- unload module-loopback");
         }
     } else {
         pa_log_error("  -- failed to update loopback module");
@@ -739,6 +792,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         if (data->route_type == STREAM_ROUTE_TYPE_AUTO || data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL) {
             PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
                 pa_log_info("[ROUTE][AUTO(_ALL)] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, route_info.role, device_type);
+                if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                    continue;
                 PA_IDXSET_FOREACH(device, conn_devices, conn_idx) {
                     dm_device_type = pa_device_manager_get_device_type(device);
                     dm_device_subtype = pa_device_manager_get_device_subtype(device);
@@ -873,6 +928,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         } else if (data->route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
             PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
                 pa_log_info("[ROUTE][AUTO_LAST_CONN] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+                if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                    continue;
                 PA_IDXSET_FOREACH(device, conn_devices, conn_idx) {
                     dm_device_type = pa_device_manager_get_device_type(device);
                     dm_device_subtype = pa_device_manager_get_device_subtype(device);
@@ -961,6 +1018,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
     } else if (data->route_type == STREAM_ROUTE_TYPE_MANUAL && data->idx_manual_devices && data->idx_avail_devices) {
         PA_IDXSET_FOREACH(device_type, data->idx_avail_devices, idx) {
             pa_log_info("[ROUTE][MANUAL] avail_device[%u] for this role[%-16s]: type[%-16s]", idx, data->stream_role, device_type);
+            if (cached_connected_devices[convert_device_type_str(device_type)][CONVERT_TO_DEVICE_DIRECTION(data->stream_type)-1] == 0)
+                continue;
             PA_IDXSET_FOREACH(device_id, data->idx_manual_devices, d_idx) {
                 pa_log_debug("  -- manual_device[%u] for this role[%-16s]: device_id(%u)", idx, data->stream_role, *device_id);
                 if ((device = pa_device_manager_get_device_by_id(u->device_manager, *device_id))) {
@@ -1124,6 +1183,42 @@ static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manage
     return PA_HOOK_OK;
 }
 
+/* Update ref. count of each connected device */
+static void update_connected_devices(const char *device_type, dm_device_direction_t direction, pa_bool_t is_connected) {
+    int32_t val = 0;
+    int* ptr_in = NULL;
+    int* ptr_out = NULL;
+
+    ptr_in = &cached_connected_devices[convert_device_type_str(device_type)][CACHED_DEVICE_DIRECTION_IN];
+    ptr_out = &cached_connected_devices[convert_device_type_str(device_type)][CACHED_DEVICE_DIRECTION_OUT];
+    val = (is_connected) ? 1 : -1;
+
+    if (direction & DM_DEVICE_DIRECTION_IN)
+        *ptr_in += val;
+    if (direction & DM_DEVICE_DIRECTION_OUT)
+        *ptr_out += val;
+
+    if (*ptr_in < 0)
+        *ptr_in = 0;
+    if (*ptr_out < 0)
+        *ptr_out = 0;
+
+    return;
+}
+
+static void dump_connected_devices()
+{
+#if 0
+    int32_t i = 0;
+
+    pa_log_debug("== dump cached current device ==");
+    for (i = 0; i < DEVICE_MAX-1; i++)
+        pa_log_debug("in: %d, out: %d", cached_connected_devices[i][CACHED_DEVICE_DIRECTION_IN], cached_connected_devices[i][CACHED_DEVICE_DIRECTION_OUT]);
+    pa_log_debug("================================");
+#endif
+    return;
+}
+
 /* Reorganize routing when a device has been connected or disconnected */
 static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_manager_hook_data_for_conn_changed *conn, struct userdata *u) {
     uint32_t idx = 0;
@@ -1143,7 +1238,10 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     device_direction = pa_device_manager_get_device_direction(conn->device);
 
     pa_log_info("[CONN] device_connection_changed_hook_cb is called. conn(%p), is_connected(%d), device(%p), direction(0x%x)",
-            conn, conn->is_connected, conn->device, device_direction);
+                conn, conn->is_connected, conn->device, device_direction);
+
+    update_connected_devices(pa_device_manager_get_device_type(conn->device), device_direction, conn->is_connected);
+    dump_connected_devices();
 
     null_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_NULL, PA_NAMEREG_SINK);
     if (!null_sink) {
@@ -1210,6 +1308,38 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                 update_loopback_module(u, FALSE);
         }
     }
+
+    return PA_HOOK_OK;
+}
+
+/* Update connected device list when a device's information has been changed */
+static pa_hook_result_t device_info_changed_hook_cb(pa_core *c, pa_device_manager_hook_data_for_info_changed *conn, struct userdata *u) {
+    dm_device_direction_t device_direction = DM_DEVICE_DIRECTION_OUT;
+    int* ptr_in = NULL;
+    int* ptr_out = NULL;
+
+    pa_assert(c);
+    pa_assert(conn);
+    pa_assert(u);
+
+    device_direction = pa_device_manager_get_device_direction(conn->device);
+
+    pa_log_info("[CONN] device_info_changed_hook_cb is called. conn(%p), changed_info(%d), device(%p), direction(0x%x)",
+                conn, conn->changed_info, conn->device, device_direction);
+
+    if (conn->changed_info == DM_DEVICE_CHANGED_INFO_IO_DIRECTION)
+        if (pa_streq(pa_device_manager_get_device_type(conn->device), DEVICE_TYPE_BT)) {
+            /* In case of the bluetooth, we do not maintain a ref. count of the bluetooth devices.
+             * Because bluetooth framework supports only one device simultaneously for audio profile. */
+            ptr_in = &cached_connected_devices[convert_device_type_str(DEVICE_TYPE_BT)][CACHED_DEVICE_DIRECTION_IN];
+            ptr_out = &cached_connected_devices[convert_device_type_str(DEVICE_TYPE_BT)][CACHED_DEVICE_DIRECTION_OUT];
+            *ptr_in = *ptr_out = 0;
+            if (device_direction & DM_DEVICE_DIRECTION_IN)
+                *ptr_in = 1;
+            if (device_direction & DM_DEVICE_DIRECTION_OUT)
+                *ptr_out = 1;
+            dump_connected_devices();
+        }
 
     return PA_HOOK_OK;
 }
@@ -1769,6 +1899,9 @@ int pa__init(pa_module *m)
         u->communicator.comm_hook_device_connection_changed_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED),
                 PA_HOOK_EARLY, (pa_hook_cb_t)device_connection_changed_hook_cb, u);
+        u->communicator.comm_hook_device_info_changed_slot = pa_hook_connect(
+                pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_INFORMATION_CHANGED),
+                PA_HOOK_EARLY, (pa_hook_cb_t)device_info_changed_hook_cb, u);
     }
     u->device_manager = pa_device_manager_get(u->core);
 
@@ -1833,6 +1966,8 @@ void pa__done(pa_module *m)
             pa_hook_slot_free(u->communicator.comm_hook_update_route_option_slot);
         if (u->communicator.comm_hook_device_connection_changed_slot)
             pa_hook_slot_free(u->communicator.comm_hook_device_connection_changed_slot);
+        if (u->communicator.comm_hook_device_info_changed_slot)
+            pa_hook_slot_free(u->communicator.comm_hook_device_info_changed_slot);
         pa_communicator_unref(u->communicator.comm);
     }
 

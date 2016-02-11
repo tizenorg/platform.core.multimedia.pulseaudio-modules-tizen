@@ -49,11 +49,13 @@ typedef struct pa_device_manager pa_device_manager;
 typedef struct dm_device dm_device;
 
 typedef struct _hook_call_data_for_conn_changed {
-    bool is_connected;
+    unsigned event_id;
+    pa_bool_t is_connected;
     dm_device *device;
 } pa_device_manager_hook_data_for_conn_changed;
 
 typedef struct _hook_call_data_for_info_changed {
+    unsigned event_id;
     dm_device_changed_info_t changed_info;
     dm_device *device;
 } pa_device_manager_hook_data_for_info_changed;

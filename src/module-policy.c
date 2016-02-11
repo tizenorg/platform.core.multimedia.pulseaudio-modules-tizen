@@ -39,6 +39,7 @@
 #include "hal-manager.h"
 #include "stream-manager.h"
 #include "device-manager.h"
+#include "subscribe-observer.h"
 
 PA_MODULE_AUTHOR("Seungbae Shin");
 PA_MODULE_DESCRIPTION("Media Policy module");
@@ -137,11 +138,13 @@ struct userdata {
         pa_hook_slot *comm_hook_update_route_option_slot;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
         pa_hook_slot *comm_hook_device_info_changed_slot;
+        pa_hook_slot *comm_hook_event_fully_handled_slot;;
     } communicator;
 
     pa_hal_manager *hal_manager;
     pa_stream_manager *stream_manager;
     pa_device_manager *device_manager;
+    pa_subscribe_observer *subscribe_observer;
 
     pa_module *module_combine_sink;
     pa_module *module_combine_sink_for_ex;
@@ -1065,6 +1068,14 @@ static void dump_connected_devices()
     return;
 }
 
+static pa_hook_result_t event_fully_handled_hook_cb(pa_core *c, pa_subscribe_observer_hook_data_for_event_handled *event_handled_hook_data, struct userdata *u) {
+    pa_assert(c);
+    pa_assert(event_handled_hook_data);
+    pa_assert(u);
+
+    pa_log_info("[HANDLED] event_fully_handled_hook_cb is called, event-type(%d) event-id(%u)", event_handled_hook_data->event_type, event_handled_hook_data->event_id);
+}
+
 /* Reorganize routing when a device has been connected or disconnected */
 static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_manager_hook_data_for_conn_changed *conn, struct userdata *u) {
     uint32_t idx = 0;
@@ -1225,10 +1236,15 @@ int pa__init(pa_module *m)
         u->communicator.comm_hook_device_info_changed_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_INFORMATION_CHANGED),
                 PA_HOOK_EARLY, (pa_hook_cb_t)device_info_changed_hook_cb, u);
+        u->communicator.comm_hook_event_fully_handled_slot = pa_hook_connect(
+                pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_EVENT_FULLY_HANDLED),
+                PA_HOOK_EARLY, (pa_hook_cb_t)event_fully_handled_hook_cb, u);
     }
     u->device_manager = pa_device_manager_get(u->core);
 
     u->stream_manager = pa_stream_manager_init(u->core);
+
+    u->subscribe_observer = pa_subscribe_observer_get(u->core);
 
     /* load null sink/source */
     args = pa_sprintf_malloc("sink_name=%s", SINK_NAME_NULL);
@@ -1272,6 +1288,9 @@ void pa__done(pa_module *m)
 
     if (u->stream_manager)
         pa_stream_manager_done(u->stream_manager);
+
+    if (u->subscribe_observer)
+        pa_subscribe_observer_unref(u->subscribe_observer);
 
     if (u->communicator.comm) {
         if (u->communicator.comm_hook_select_proper_sink_or_source_slot)

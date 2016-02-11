@@ -81,7 +81,8 @@ module_policy_la_SOURCES = \
           src/communicator.c   src/communicator.h   \
           src/stream-manager.c   src/stream-manager.h   src/stream-manager-priv.h   \
           src/stream-manager-volume.c   src/stream-manager-volume.h   src/stream-manager-volume-priv.h   \
-          src/device-manager.c   src/device-manager.h
+          src/device-manager.c   src/device-manager.h \
+          src/subscribe-observer.c   src/subscribe-observer.h
 module_policy_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS) -L$(pulsemodlibexecdir)
 module_policy_la_LIBADD = $(AM_LIBADD) $(PACORE_LIBS) $(PA_LIBS) $(DBUS_LIBS) $(VCONF_LIBS) $(INIPARSER_LIBS) $(LIBJSON_LIBS) libhal-manager.la
 module_policy_la_CFLAGS = $(AM_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS) $(DBUS_CFLAGS) $(VCONF_CFLAGS) $(INIPARSER_CFLAGS) $(LIBJSON_CFLAGS)

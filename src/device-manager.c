@@ -442,6 +442,7 @@ struct pulse_device_prop {
 /******************************************************************************/
 
 int device_id_max_g = 1;
+unsigned int event_id_max_g = 1;
 
 #ifdef HAVE_DBUS
 
@@ -3466,6 +3467,7 @@ static void send_device_connected_signal(dm_device *device_item, bool connected,
 
     device_id = (dbus_int32_t) device_item->id;
     compound_state = COMPOUND_STATE(profile_item);
+    dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_UINT32, &event_id_max_g);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_INT32, &device_id);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_STRING, &device_item->type);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_INT32, &profile_item->direction);
@@ -3502,6 +3504,9 @@ static void send_device_info_changed_signal(dm_device *device_item, int changed_
     }
     device_id = (dbus_int32_t) device_item->id;
     compound_state = COMPOUND_STATE(profile_item);
+    dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_UINT32, &event_id_max_g);
+    event_id_max_g++;
+    dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_INT32, &device_id);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_INT32, &device_id);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_STRING, &device_item->type);
     dbus_message_iter_append_basic(&device_iter, DBUS_TYPE_INT32, &profile_item->direction);
@@ -3518,10 +3523,14 @@ static void send_device_info_changed_signal(dm_device *device_item, int changed_
 static void notify_device_connection_changed(dm_device *device_item, bool connected, pa_device_manager *dm) {
     pa_device_manager_hook_data_for_conn_changed hook_data;
 
-    send_device_connected_signal(device_item, connected, dm);
+    event_id_max_g++;
+
+    hook_data.event_id = event_id_max_g;
     hook_data.is_connected = connected;
     hook_data.device = device_item;
+    pa_log_info("notify_device_connection_changed");
     pa_hook_fire(pa_communicator_hook(dm->comm, PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED), &hook_data);
+    send_device_connected_signal(device_item, connected, dm);
 }
 
 static void notify_device_info_changed(dm_device *device_item, dm_device_changed_info_t changed_type, pa_device_manager *dm) {
@@ -4467,6 +4476,7 @@ void pa_device_manager_unref(pa_device_manager *dm) {
         pa_idxset_free(dm->device_status, NULL);
 
     dbus_deinit(dm);
+
 
     if (dm->core)
         pa_shared_remove(dm->core, SHARED_DEVICE_MANAGER);

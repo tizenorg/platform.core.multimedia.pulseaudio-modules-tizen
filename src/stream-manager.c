@@ -2194,15 +2194,15 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
                 req_format = pa_idxset_first(((pa_sink_input_new_data*)stream)->req_formats, NULL);
                 if (req_format && req_format->plist) {
                     /* set sample_spec */
-                    rate_str = pa_proplist_gets(req_format->plist, PA_PROP_FORMAT_RATE);
-                    ch_str = pa_proplist_gets(req_format->plist, PA_PROP_FORMAT_CHANNELS);
                     if (pa_format_info_get_prop_string(req_format, PA_PROP_FORMAT_SAMPLE_FORMAT, &format_str) == 0)
                         ((pa_sink_input_new_data*)stream)->sample_spec.format = pa_parse_sample_format((const char*)format_str);
-                    pa_log_info("req rate(%s), req ch(%s), req format(%s)", rate_str, ch_str, format_str);
-                    if (ch_str)
-                        ((pa_sink_input_new_data*)stream)->sample_spec.channels = atoi(ch_str);
-                    if (rate_str)
+                    if ((rate_str = pa_proplist_gets(req_format->plist, PA_PROP_FORMAT_RATE)))
                         ((pa_sink_input_new_data*)stream)->sample_spec.rate = atoi(rate_str);
+                    if ((ch_str = pa_proplist_gets(req_format->plist, PA_PROP_FORMAT_CHANNELS)))
+                        ((pa_sink_input_new_data*)stream)->sample_spec.channels = atoi(ch_str);
+
+                    pa_log_info("req rate(%s), req ch(%s), req format(%s)", rate_str, ch_str, format_str);
+
                     /* set channel map if it is not set by client */
                     if (!((pa_sink_input_new_data*)stream)->channel_map_is_set) {
                         pa_channel_map_init_auto(&(((pa_sink_input_new_data*)stream)->channel_map),
@@ -2705,51 +2705,57 @@ static void find_next_device_for_auto_route(pa_stream_manager *m, stream_route_t
     dm_device* latest_device = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
     pa_assert(cur_device_type);
     pa_assert(next_device);
     pa_assert((route_type == STREAM_ROUTE_TYPE_AUTO || route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED));
 
     *next_device = NULL;
-    if (m->stream_infos) {
-        si = pa_hashmap_get(m->stream_infos, role);
-        if (si && si->route_type == route_type) {
-            devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
-            if (devices) {
-                if (route_type == STREAM_ROUTE_TYPE_AUTO) {
-                    PA_IDXSET_FOREACH(device_type, devices, idx) {
-                        if (ret_next) {
-                            if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
-                                pa_log_debug("found next device[%s, %p]", device_type, *next_device);
-                                break;
-                            } else
-                                continue;
-                        }
-                        if (pa_streq(device_type, cur_device_type)) {
-                            ret_next = TRUE;
-                            continue;
-                        }
-                    }
 
-                } else if (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
-                    PA_IDXSET_FOREACH(device_type, devices, idx) {
-                        if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
-                            creation_time = pa_device_manager_get_device_creation_time(*next_device);
-                            if (!latest_device || (latest_creation_time <= creation_time)) {
-                                latest_device = *next_device;
-                                latest_creation_time = creation_time;
-                            }
-                        }
-                    }
-                    *next_device = latest_device;
-                    pa_log_debug("found next device[%s, %p], creation_time[%llu]", device_type, *next_device, latest_creation_time);
+    si = pa_hashmap_get(m->stream_infos, role);
+    if (!si) {
+        pa_log_warn("not support this role[%s]", role);
+        return;
+    }
+    if (si->route_type != route_type) {
+        pa_log_warn("skip this route_type[%d]", si->route_type);
+        return;
+    }
+
+    devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
+    if (!devices) {
+        pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
+        return;
+    }
+
+    if (route_type == STREAM_ROUTE_TYPE_AUTO) {
+        PA_IDXSET_FOREACH(device_type, devices, idx) {
+            if (ret_next) {
+                if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
+                    pa_log_debug("found next device[%s, %p]", device_type, *next_device);
+                    break;
+                } else
+                    continue;
+            }
+            if (pa_streq(device_type, cur_device_type)) {
+                ret_next = TRUE;
+                continue;
+            }
+        }
+    } else if (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED) {
+        PA_IDXSET_FOREACH(device_type, devices, idx) {
+            if ((*next_device = pa_device_manager_get_device(m->dm, device_type))) {
+                creation_time = pa_device_manager_get_device_creation_time(*next_device);
+                if (!latest_device || (latest_creation_time <= creation_time)) {
+                    latest_device = *next_device;
+                    latest_creation_time = creation_time;
                 }
-            } else
-                pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
-        } else
-            pa_log_warn("not support this role[%s]", role);
-    } else
-        pa_log_error("stream_infos is null");
+            }
+        }
+        *next_device = latest_device;
+        pa_log_debug("found next device[%s, %p], creation_time[%llu]", device_type, *next_device, latest_creation_time);
+    }
 
     pa_log_debug("next_device is [%p] for role[%s]/route_type[%d]/stream_type[%d]", *next_device, role, route_type, stream_type);
 
@@ -2763,42 +2769,44 @@ static void is_available_device_for_auto_route(pa_stream_manager *m, stream_rout
     char *device_type = NULL;
 
     pa_assert(m);
+    pa_assert(m->stream_infos);
     pa_assert(role);
     pa_assert(cur_device_type);
     pa_assert(new_device_type);
     pa_assert(available);
     pa_assert((route_type == STREAM_ROUTE_TYPE_AUTO || route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED));
 
-    if (m->stream_infos) {
-        si = pa_hashmap_get(m->stream_infos, role);
-        if (si && si->route_type == route_type) {
-            *available = FALSE;
-            devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
-            if (devices) {
-                PA_IDXSET_FOREACH(device_type, devices, idx) {
-                    if (route_type == STREAM_ROUTE_TYPE_AUTO) {
-                        if (cur_device_type && pa_streq(device_type, cur_device_type)) {
-                            pa_log_debug("cur_device[%s]'s priority is more higher than new_device[%s]", cur_device_type, new_device_type);
-                            break;
-                        }
-                    }
-                    if (pa_streq(device_type, new_device_type)) {
-                        *available = TRUE;
-                        break;
-                    }
-                }
-            } else {
-                pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
-                *available = FALSE;
-            }
-        } else {
-            pa_log_warn("not support this role[%s]", role);
-            *available = FALSE;
-        }
-    } else {
-        pa_log_error("stream_infos is null");
-        *available = FALSE;
+    *available = FALSE;
+
+    si = pa_hashmap_get(m->stream_infos, role);
+    if (!si) {
+        pa_log_warn("not support this role[%s]", role);
+        return;
     }
+    if (si->route_type != route_type) {
+        pa_log_warn("skip this route_type[%d]", si->route_type);
+        return;
+    }
+
+    devices = (stream_type == STREAM_SINK_INPUT) ? si->idx_avail_out_devices : si->idx_avail_in_devices;
+    if (!devices) {
+        pa_log_error("could not found a device list for this role[%s], stream type[%d]", role, stream_type);
+        return;
+    }
+
+    PA_IDXSET_FOREACH(device_type, devices, idx) {
+        if (route_type == STREAM_ROUTE_TYPE_AUTO) {
+            if (pa_streq(device_type, cur_device_type)) {
+                pa_log_debug("cur_device[%s]'s priority is more higher than new_device[%s]", cur_device_type, new_device_type);
+                break;
+            }
+        }
+        if (pa_streq(device_type, new_device_type)) {
+            *available = TRUE;
+            break;
+        }
+    }
+
     pa_log_debug("is new_device[%s] available for role[%s]/stream_type[%d]:%d", new_device_type, role, stream_type, *available);
 
     return;
@@ -3312,19 +3320,20 @@ int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_ne
     else
         route_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(stream, stream_type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
 
-    if (route_type_str) {
-        if (!pa_atoi(route_type_str, (int32_t*)stream_route_type))
-            pa_log_debug("stream(%p), origins_from_new_data(%d), stream_type(%d): route_type(%d)", stream, origins_from_new_data, stream_type, *stream_route_type);
-        else {
-            pa_log_error("could not convert route_type_str(%s) to int", route_type_str);
-            return -1;
-        }
-    } else {
+    if (!route_type_str) {
         pa_log_warn("could not get route type from the stream(%p)", stream);
+        return -1;
+     }
+
+    if (!pa_atoi(route_type_str, (int32_t*)stream_route_type))
+        pa_log_debug("stream(%p), origins_from_new_data(%d), stream_type(%d): route_type(%d)",
+                     stream, origins_from_new_data, stream_type, *stream_route_type);
+    else {
+        pa_log_error("could not convert route_type_str(%s) to int", route_type_str);
         return -1;
     }
 
-	return 0;
+    return 0;
 }
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c) {

@@ -2482,7 +2482,8 @@ FAILURE:
     return result;
 }
 
-static void update_buffer_attribute(pa_stream_manager *m, void *new_data, stream_type_t stream_type) {
+/* Set buffer attributes from HAL */
+static void set_buffer_attribute(pa_stream_manager *m, void *new_data, stream_type_t stream_type) {
     int32_t maxlength = -1;
     int32_t tlength = -1;
     int32_t prebuf = -1;
@@ -2518,14 +2519,30 @@ static void update_buffer_attribute(pa_stream_manager *m, void *new_data, stream
     return;
 }
 
+/* Remove the sink-input from muted streams */
+static void remove_sink_input_from_muted_streams(pa_stream_manager *m, pa_sink_input *i) {
+    pa_idxset *streams;
+    pa_sink_input *si;
+    void *state;
+    uint32_t idx = 0;
+
+    pa_assert(m);
+
+    PA_HASHMAP_FOREACH(streams, m->muted_streams, state)
+        PA_IDXSET_FOREACH(si, streams, idx)
+            if (si == i)
+                pa_idxset_remove_by_data(streams, i, NULL);
+
+    return;
+}
+
 static pa_hook_result_t sink_input_new_cb(pa_core *core, pa_sink_input_new_data *new_data, pa_stream_manager *m) {
     pa_core_assert_ref(core);
 
     pa_log_info("start sink_input_new_cb");
 
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_PREPARE, true);
-    /* Update buffer attributes from HAL */
-    update_buffer_attribute(m, new_data, STREAM_SINK_INPUT);
+    set_buffer_attribute(m, new_data, STREAM_SINK_INPUT);
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_UPDATE_VOLUME, true);
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, true);
 
@@ -2548,6 +2565,7 @@ static pa_hook_result_t sink_input_unlink_cb(pa_core *core, pa_sink_input *i, pa
     pa_sink_input_assert_ref(i);
 
     pa_log_info("start sink_input_unlink_cb, i(%p, index:%u)", i, i->index);
+    remove_sink_input_from_muted_streams(m, i);
     process_stream(m, i, STREAM_SINK_INPUT, PROCESS_COMMAND_REMOVE_PARENT_ID, false);
     process_stream(m, i, STREAM_SINK_INPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_ENDED, false);
 
@@ -2617,7 +2635,7 @@ static pa_hook_result_t source_output_new_cb(pa_core *core, pa_source_output_new
 
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_PREPARE, true);
     /* Update buffer attributes from HAL */
-    update_buffer_attribute(m, new_data, STREAM_SOURCE_OUTPUT);
+    set_buffer_attribute(m, new_data, STREAM_SOURCE_OUTPUT);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_UPDATE_VOLUME, true);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, true);
 
@@ -3061,6 +3079,59 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
     return;
 }
 
+static void mute_sink_inputs_as_device_disconnection(pa_stream_manager *m, uint32_t event_id, bool need_to_mute, void *user_data) {
+    pa_idxset *muted_streams;
+    uint32_t s_idx = 0;
+    pa_cvolume vol;
+    pa_sink_input *i;
+    const char *mute_key = "mute_by_device_disconnection";
+
+    pa_assert(m);
+
+    if (need_to_mute) {
+        if (!user_data) {
+            pa_log_error("invalid argument, inputs is needed");
+            return;
+        }
+        vol.channels = 1;
+        pa_parse_volume("0%", &vol.values[0]);
+        muted_streams = pa_idxset_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);
+        PA_IDXSET_FOREACH(i, (pa_idxset *)user_data, s_idx) {
+            pa_log_debug("found a stream(%p, %u) that should be muted.", i, i->index);
+            pa_sink_input_add_volume_factor(i, mute_key, &vol);
+            pa_idxset_put(muted_streams, i, NULL);
+        }
+        pa_hashmap_put(m->muted_streams, (void*)event_id, muted_streams);
+    } else {
+        if (!(muted_streams = pa_hashmap_get(m->muted_streams, (void*)event_id))) {
+            pa_log_error("could not find muted_streams for event_id(%u)", event_id);
+            return;
+        }
+        PA_IDXSET_FOREACH(i, muted_streams, s_idx) {
+            pa_idxset_remove_by_data(muted_streams, i, NULL);
+            pa_sink_input_remove_volume_factor(i, mute_key);
+        }
+        pa_hashmap_remove(m->muted_streams, (void*)event_id);
+        pa_idxset_free(muted_streams, NULL);
+    }
+
+    return;
+}
+
+static pa_hook_result_t event_fully_handled_hook_cb(pa_core *c, pa_subscribe_observer_hook_data_for_event_handled *event_handled_hook_data, pa_stream_manager *m) {
+    pa_assert(c);
+    pa_assert(event_handled_hook_data);
+    pa_assert(m);
+
+    pa_log_info("[SM][HANDLED] event_fully_handled_hook_cb is called. event-id(%u), event-type(%d)",
+                event_handled_hook_data->event_id, event_handled_hook_data->event_type);
+
+    /* un-mute streams */
+    mute_sink_inputs_as_device_disconnection(m, event_handled_hook_data->event_id, false, NULL);
+
+    return PA_HOOK_OK;
+}
+
 /* Reorganize routing when a device has been connected or disconnected */
 static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_manager_hook_data_for_conn_changed *data, pa_stream_manager *m) {
     const char *active_dev = NULL;
@@ -3070,6 +3141,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     bool use_internal_codec = false;
     void *s = NULL;
     uint32_t s_idx = 0;
+    uint32_t device_id = 0;
     pa_sink *sink = NULL;
     pa_source *source = NULL;
 
@@ -3079,11 +3151,16 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
 
     device_direction = pa_device_manager_get_device_direction(data->device);
     device_type = pa_device_manager_get_device_type(data->device);
+    device_id = pa_device_manager_get_device_id(data->device);
     use_internal_codec = pa_device_manager_is_device_use_internal_codec(data->device, device_direction, DEVICE_ROLE_NORMAL);
 
-    pa_log_info("[SM][CONN] device_connection_changed_hook_cb is called. data(%p), is_connected(%d), device(%p, %s), direction(0x%x), use_internal_codec(%d)",
-        data, data->is_connected, data->device, device_type, device_direction, use_internal_codec);
+    pa_log_info("[SM][CONN] device_connection_changed_hook_cb is called. evend_id(%u), is_connected(%d), device(%p, %s, %u), direction(0x%x), use_internal_codec(%d)",
+                data->event_id, data->is_connected, data->device, device_type, device_id, device_direction, use_internal_codec);
 
+    /* mute all the streams belong to this device, those will be un-muted in event_fully_handled_hook_cb */
+    if (!data->is_connected && (device_direction & DM_DEVICE_DIRECTION_OUT))
+        if ((sink = pa_device_manager_get_sink(data->device, DEVICE_ROLE_NORMAL)))
+            mute_sink_inputs_as_device_disconnection(m, data->event_id, true, sink->inputs);
 
     /* Update streams belong to this external device that have MAUAL_EXT route type */
     if (!use_internal_codec && (device_direction & DM_DEVICE_DIRECTION_IN)) {
@@ -3259,6 +3336,7 @@ static int init_ipc(pa_stream_manager *m) {
     };
 
     pa_assert(m);
+
     pa_log_info("Initialization for IPC");
 #ifdef HAVE_DBUS
 #ifdef USE_DBUS_PROTOCOL
@@ -3351,8 +3429,8 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m->hal = pa_hal_manager_get(c);
     if (pa_hal_manager_set_messsage_callback(m->hal, message_cb, m))
         pa_log_warn("skip setting message callback");
-
     m->dm = pa_device_manager_get(c);
+    m->subs_ob = pa_subscribe_observer_get(c);
 #ifdef HAVE_DBUS
 #ifdef USE_DBUS_PROTOCOL
     m->dbus_protocol = NULL;
@@ -3362,14 +3440,12 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
 #endif
     if (init_ipc(m))
         goto fail;
-
     if (init_stream_map(m))
         goto fail;
-
     if (init_volumes(m))
         goto fail;
-
     m->stream_parents = pa_hashmap_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);
+    m->muted_streams = pa_hashmap_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);
 
     m->sink_input_new_slot = pa_hook_connect(&m->core->hooks[PA_CORE_HOOK_SINK_INPUT_NEW], PA_HOOK_EARLY, (pa_hook_cb_t) sink_input_new_cb, m);
     m->sink_input_put_slot = pa_hook_connect(&m->core->hooks[PA_CORE_HOOK_SINK_INPUT_PUT], PA_HOOK_EARLY, (pa_hook_cb_t) sink_input_put_cb, m);
@@ -3389,6 +3465,8 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m->comm.comm = pa_communicator_get(c);
     m->comm.comm_hook_device_connection_changed_slot = pa_hook_connect(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED),
             PA_HOOK_EARLY + 10, (pa_hook_cb_t)device_connection_changed_hook_cb, m);
+    m->comm.comm_hook_event_fully_handled_slot = pa_hook_connect(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_EVENT_FULLY_HANDLED),
+            PA_HOOK_EARLY + 10, (pa_hook_cb_t)event_fully_handled_hook_cb, m);
 
     return m;
 
@@ -3399,16 +3477,25 @@ fail:
     deinit_ipc(m);
     if (m->hal)
         pa_hal_manager_unref(m->hal);
+    if (m->dm)
+        pa_device_manager_unref(m->dm);
+    if (m->subs_ob)
+        pa_subscribe_observer_unref(m->subs_ob);
     pa_xfree(m);
     return 0;
 }
 
 void pa_stream_manager_done(pa_stream_manager *m) {
+    void *state;
+    pa_idxset *streams;
+
     pa_assert(m);
 
     if (m->comm.comm) {
         if (m->comm.comm_hook_device_connection_changed_slot)
             pa_hook_slot_free(m->comm.comm_hook_device_connection_changed_slot);
+        if (m->comm.comm_hook_event_fully_handled_slot)
+            pa_hook_slot_free(m->comm.comm_hook_event_fully_handled_slot);
         pa_communicator_unref(m->comm.comm);
     }
 
@@ -3436,12 +3523,21 @@ void pa_stream_manager_done(pa_stream_manager *m) {
     if (m->source_output_state_changed_slot)
         pa_hook_slot_free(m->source_output_state_changed_slot);
 
+    if (m->muted_streams) {
+        PA_HASHMAP_FOREACH(streams, m->muted_streams, state)
+            pa_idxset_free(streams, NULL);
+        pa_hashmap_free(m->muted_streams);
+    }
+
     if (m->stream_parents)
         pa_hashmap_free(m->stream_parents);
 
     deinit_volumes(m);
     deinit_stream_map(m);
     deinit_ipc(m);
+
+    if (m->subs_ob)
+        pa_subscribe_observer_unref(m->subs_ob);
 
     if (m->dm)
         pa_device_manager_unref(m->dm);

@@ -5,6 +5,7 @@
 #include "hal-manager.h"
 #include "communicator.h"
 #include "device-manager.h"
+#include "subscribe-observer.h"
 
 #include <pulsecore/core-util.h>
 #include <pulsecore/namereg.h>
@@ -69,10 +70,12 @@ struct _stream_manager {
     pa_core *core;
     pa_hal_manager *hal;
     pa_device_manager *dm;
+    pa_subscribe_observer *subs_ob;
     pa_hashmap *volume_infos;
     pa_hashmap *volume_modifiers;
     pa_hashmap *stream_infos;
     pa_hashmap *stream_parents;
+    pa_hashmap *muted_streams;
     cur_max_priority_stream cur_highest_priority;
     pa_hook_slot
         *sink_input_new_slot,
@@ -98,8 +101,8 @@ struct _stream_manager {
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
+        pa_hook_slot *comm_hook_event_fully_handled_slot;
     } comm;
 };
-
 
 #endif

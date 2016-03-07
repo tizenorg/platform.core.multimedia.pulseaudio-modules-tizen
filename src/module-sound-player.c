@@ -429,7 +429,7 @@ static int init_ipc(struct userdata *u) {
 
     pre_mask = umask(0);
     if (mknod(KEYTONE_PATH, S_IFIFO|0660, 0) < 0)
-        pa_log_warn("mknod failed. errno=[%d][%s]", errno, strerror(errno));
+        pa_log_warn("mknod failed. errno=[%d][%s]", errno, pa_cstrerror(errno));
 
     umask(pre_mask);
 
@@ -444,11 +444,11 @@ static int init_ipc(struct userdata *u) {
 
     /* change access mode so group can use keytone pipe */
     if (fchmod(u->fd, 0666) == -1)
-        pa_log_warn("Changing keytone access mode is failed. errno=[%d][%s]", errno, strerror(errno));
+        pa_log_warn("Changing keytone access mode is failed. errno=[%d][%s]", errno, pa_cstrerror(errno));
 
     /* change group due to security request */
     if (fchown(u->fd, -1, KEYTONE_GROUP) == -1)
-        pa_log_warn("Changing keytone group is failed. errno=[%d][%s]", errno, strerror(errno));
+        pa_log_warn("Changing keytone group is failed. errno=[%d][%s]", errno, pa_cstrerror(errno));
 
     u->io = u->module->core->mainloop->io_new(u->module->core->mainloop, u->fd, PA_IO_EVENT_INPUT|PA_IO_EVENT_HANGUP, io_event_callback, u);
 

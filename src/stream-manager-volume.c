@@ -29,7 +29,7 @@
 #include "stream-manager-volume.h"
 #include "stream-manager-volume-priv.h"
 
-#define VOLUME_INI_DEFAULT_PATH     "/usr/etc/mmfw_audio_volume.ini"
+#define VOLUME_INI_DEFAULT_PATH     SYSCONFDIR"/multimedia/mmfw_audio_volume.ini" /* SYSCONFDIR is defined at .spec */
 #define VOLUME_INI_TUNED_PATH       "/opt/system/mmfw_audio_volume.ini"
 #define DEFAULT_TABLE               "volumes"
 

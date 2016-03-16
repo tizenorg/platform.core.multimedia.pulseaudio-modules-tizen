@@ -29,7 +29,7 @@ This package contains pulseaudio modules for tizen audio system.
 %setup -q
 
 %build
-export CFLAGS="%{optflags} -fno-strict-aliasing"
+export CFLAGS="%{optflags} -fno-strict-aliasing -DSYSCONFDIR=\\\"%{_sysconfdir}\\\""
 
 export LD_AS_NEEDED=0
 %reconfigure --prefix=%{_prefix} \

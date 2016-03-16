@@ -1322,20 +1322,20 @@ static int init_stream_map(pa_stream_manager *m) {
 
     /* Volumes */
     m->volume_infos = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-    if ((volume_array_o = json_object_object_get(o, STREAM_MAP_VOLUMES)) && json_object_is_type(volume_array_o, json_type_array)) {
+    if (json_object_object_get_ex(o, STREAM_MAP_VOLUMES, &volume_array_o) && json_object_is_type(volume_array_o, json_type_array)) {
         num_of_volume_types = json_object_array_length(volume_array_o);
         for (i = 0; i < num_of_volume_types; i++) {
             if ((volume_o = json_object_array_get_idx(volume_array_o, i)) && json_object_is_type(volume_o, json_type_object)) {
                 v = pa_xmalloc0(sizeof(volume_info));
                 pa_log_debug("volume found [%d]", i);
-                if ((volume_type_o = json_object_object_get(volume_o, STREAM_MAP_VOLUME_TYPE)) && json_object_is_type(volume_type_o, json_type_string)) {
+                if (json_object_object_get_ex(volume_o, STREAM_MAP_VOLUME_TYPE, &volume_type_o) && json_object_is_type(volume_type_o, json_type_string)) {
                     volume_type = json_object_get_string(volume_type_o);
                     pa_log_debug(" - type : %s", volume_type);
                 } else {
                     pa_log_error("Get volume type failed");
                     goto failed;
                 }
-                if ((is_hal_volume_o = json_object_object_get(volume_o, STREAM_MAP_VOLUME_IS_FOR_HAL)) && json_object_is_type(is_hal_volume_o, json_type_int)) {
+                if (json_object_object_get_ex(volume_o, STREAM_MAP_VOLUME_IS_FOR_HAL, &is_hal_volume_o) && json_object_is_type(is_hal_volume_o, json_type_int)) {
                     v->is_hal_volume_type = (pa_bool_t)json_object_get_int(is_hal_volume_o);
                     pa_log_debug(" - is-hal-volume : %d", v->is_hal_volume_type);
                 } else {
@@ -1349,28 +1349,28 @@ static int init_stream_map(pa_stream_manager *m) {
 
     /* Streams */
     m->stream_infos = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-    if ((stream_array_o = json_object_object_get(o, STREAM_MAP_STREAMS)) && json_object_is_type(stream_array_o, json_type_array)) {
+    if (json_object_object_get_ex(o, STREAM_MAP_STREAMS, &stream_array_o) && json_object_is_type(stream_array_o, json_type_array)) {
         num_of_stream_types = json_object_array_length(stream_array_o);
         for (i = 0; i < num_of_stream_types; i++) {
 
             if ((stream_o = json_object_array_get_idx(stream_array_o, i)) && json_object_is_type(stream_o, json_type_object)) {
                 s = pa_xmalloc0(sizeof(stream_info));
                 pa_log_debug("stream found [%d]", i);
-                if ((role_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_ROLE)) && json_object_is_type(role_o, json_type_string)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_ROLE, &role_o) && json_object_is_type(role_o, json_type_string)) {
                     role = json_object_get_string(role_o);
                     pa_log_debug(" - role : %s", role);
                 } else {
                     pa_log_error("Get stream role failed");
                     goto failed;
                 }
-                if ((priority_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_PRIORITY)) && json_object_is_type(priority_o, json_type_int)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_PRIORITY, &priority_o) && json_object_is_type(priority_o, json_type_int)) {
                     s->priority = json_object_get_int(priority_o);
                     pa_log_debug(" - priority : %d", s->priority);
                 } else {
                     pa_log_error("Get stream priority failed");
                     goto failed;
                 }
-                if ((route_type_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_ROUTE_TYPE)) && json_object_is_type(route_type_o, json_type_string)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_ROUTE_TYPE, &route_type_o) && json_object_is_type(route_type_o, json_type_string)) {
                     if (convert_route_type(&(s->route_type), json_object_get_string(route_type_o))) {
                         pa_log_error("convert stream route-type failed");
                         goto failed;
@@ -1380,14 +1380,14 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream route-type failed");
                     goto failed;
                 }
-                if ((volume_types_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_VOLUME_TYPES)) && json_object_is_type(volume_types_o, json_type_object)) {
-                    if ((volume_type_in_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN)) && json_object_is_type(volume_type_in_o, json_type_string))
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_VOLUME_TYPES, &volume_types_o) && json_object_is_type(volume_types_o, json_type_object)) {
+                    if (json_object_object_get_ex(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN, &volume_type_in_o) && json_object_is_type(volume_type_in_o, json_type_string))
                         s->volume_types[STREAM_DIRECTION_IN] = json_object_get_string(volume_type_in_o);
                     else {
                         pa_log_error("Get stream volume-type-in failed");
                         goto failed;
                     }
-                    if ((volume_type_out_o = json_object_object_get(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT)) && json_object_is_type(volume_type_out_o, json_type_string))
+                    if (json_object_object_get_ex(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT, &volume_type_out_o) && json_object_is_type(volume_type_out_o, json_type_string))
                         s->volume_types[STREAM_DIRECTION_OUT] = json_object_get_string(volume_type_out_o);
                     else {
                         pa_log_error("Get stream volume-type-out failed");
@@ -1398,7 +1398,7 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream volume-types failed");
                     goto failed;
                 }
-                if ((avail_in_devices_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_AVAIL_IN_DEVICES)) && json_object_is_type(avail_in_devices_o, json_type_array)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_IN_DEVICES, &avail_in_devices_o) && json_object_is_type(avail_in_devices_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_in_devices = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
                     num_of_avail_in_devices = json_object_array_length(avail_in_devices_o);
@@ -1413,7 +1413,7 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream avail-in-devices failed");
                     goto failed;
                 }
-                if ((avail_out_devices_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_AVAIL_OUT_DEVICES)) && json_object_is_type(avail_out_devices_o, json_type_array)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_OUT_DEVICES, &avail_out_devices_o) && json_object_is_type(avail_out_devices_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_out_devices = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
                     num_of_avail_out_devices = json_object_array_length(avail_out_devices_o);
@@ -1428,7 +1428,7 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream avail-out-devices failed");
                     goto failed;
                 }
-                if ((avail_frameworks_o = json_object_object_get(stream_o, STREAM_MAP_STREAM_AVAIL_FRAMEWORKS)) && json_object_is_type(avail_frameworks_o, json_type_array)) {
+                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_FRAMEWORKS, &avail_frameworks_o) && json_object_is_type(avail_frameworks_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_frameworks = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
                     num_of_avail_frameworks = json_object_array_length(avail_frameworks_o);
@@ -3242,6 +3242,12 @@ static void message_cb(const char *name, int value, void *user_data) {
 }
 
 static int init_ipc(pa_stream_manager *m) {
+    DBusError err;
+    pa_dbus_connection *conn = NULL;
+    static const DBusObjectPathVTable vtable = {
+        .message_function = method_handler_for_vt,
+    };
+
     pa_assert(m);
     pa_log_info("Initialization for IPC");
 #ifdef HAVE_DBUS
@@ -3250,11 +3256,6 @@ static int init_ipc(pa_stream_manager *m) {
     pa_assert_se(pa_dbus_protocol_add_interface(m->dbus_protocol, STREAM_MANAGER_OBJECT_PATH, &stream_manager_interface_info, m) >= 0);
     pa_assert_se(pa_dbus_protocol_register_extension(m->dbus_protocol, STREAM_MANAGER_INTERFACE) >= 0);
 #else
-    DBusError err;
-    pa_dbus_connection *conn = NULL;
-    static const DBusObjectPathVTable vtable = {
-        .message_function = method_handler_for_vt,
-    };
 
     dbus_error_init(&err);
 

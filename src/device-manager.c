@@ -1306,36 +1306,6 @@ static pa_bool_t pulse_device_same_device_string(void *pulse_device, pa_device_t
     return pa_streq(pulse_device_string, device_string);
 }
 
-static dm_device* _device_item_set_active_profile(dm_device *device_item, const char *device_profile) {
-    dm_device_profile *profile_item = NULL;
-    uint32_t idx, active_profile_idx = PA_INVALID_INDEX, prev_active_profile = PA_INVALID_INDEX;
-
-    if (!device_item || !device_item->profiles) {
-        pa_log_error("Invalid Parameter");
-        return NULL;
-    }
-
-    prev_active_profile = device_item->active_profile;
-    PA_IDXSET_FOREACH(profile_item,  device_item->profiles, idx) {
-        if (!compare_device_profile(profile_item->profile, device_profile)) {
-            active_profile_idx = idx;
-        }
-    }
-
-    if (active_profile_idx != PA_INVALID_INDEX) {
-        device_item->active_profile = active_profile_idx;
-    } else {
-        return NULL;
-    }
-
-    if (prev_active_profile != device_item->active_profile) {
-        pa_log_debug("%s's active profile : %u", device_item->name, device_item->active_profile);
-        notify_device_info_changed(device_item, DM_DEVICE_CHANGED_INFO_IO_DIRECTION, device_item->dm);
-    }
-
-    return device_item;
-}
-
 static int get_profile_priority(const char *device_profile) {
     if (!device_profile) {
         return 0;
@@ -2209,7 +2179,6 @@ static const char* device_file_info_get_role_with_params(struct device_file_info
 static dm_device* handle_device_type_available(struct device_type_info *type_info, const char *name, pa_device_manager *dm) {
     dm_device_profile *profile_item = NULL;
     dm_device *device_item = NULL;
-    pa_bool_t made_newly = FALSE;
     dm_device_direction_t direction;
     pa_hashmap *playback = NULL, *capture = NULL;
 
@@ -2244,7 +2213,6 @@ static dm_device* handle_device_type_available(struct device_type_info *type_inf
     if (!(device_item = _device_manager_get_device(dm->device_list, type_info->type))) {
         pa_log_debug("No device item for %s, Create", type_info->type);
         device_item = create_device_item(type_info->type, name, profile_item, dm);
-        made_newly = TRUE;
     } else {
         _device_item_add_profile(device_item, profile_item, NULL, dm);
     }
@@ -2851,7 +2819,7 @@ static struct device_file_info* parse_device_file_object(json_object *device_fil
     pa_assert(device_string_key);
     pa_assert(json_object_is_type(device_file_o, json_type_object));
 
-    if ((device_file_prop_o = json_object_object_get(device_file_o, "device-string")) && json_object_is_type(device_file_prop_o, json_type_string)) {
+    if (json_object_object_get_ex(device_file_o, "device-string", &device_file_prop_o) && json_object_is_type(device_file_prop_o, json_type_string)) {
         if ((device_string = json_object_get_string(device_file_prop_o))) {
             pa_log_debug("[DEBUG_PARSE] ---------------- Device File '%s' ----------------", device_string);
         } else {
@@ -2863,7 +2831,7 @@ static struct device_file_info* parse_device_file_object(json_object *device_fil
         return NULL;
     }
 
-    if ((device_file_prop_o = json_object_object_get(device_file_o, DEVICE_TYPE_PROP_ROLE))) {
+    if (json_object_object_get_ex(device_file_o, DEVICE_TYPE_PROP_ROLE, &device_file_prop_o)) {
         if (!(roles = parse_device_role_object(device_file_prop_o))) {
             pa_log_error("Parse device role for '%s' failed", device_string);
             goto failed;
@@ -2940,12 +2908,12 @@ static struct device_file_map *parse_device_file_map() {
 
     file_map = pa_xmalloc0(sizeof(struct device_file_map));
 
-    if ((device_files_o = json_object_object_get(o, DEVICE_FILE_OBJECT)) && json_object_is_type(device_files_o, json_type_object)) {
-        if ((playback_devices_o = json_object_object_get(device_files_o, "playback-devices"))) {
+    if (json_object_object_get_ex(o, DEVICE_FILE_OBJECT, &device_files_o) && json_object_is_type(device_files_o, json_type_object)) {
+        if (json_object_object_get_ex(device_files_o, "playback-devices", &playback_devices_o)) {
             pa_log_debug("[DEBUG_PARSE] ----------------- Playback Device Files ------------------");
             file_map->playback = parse_device_file_array_object(playback_devices_o);
         }
-        if ((capture_devices_o = json_object_object_get(device_files_o, "capture-devices"))) {
+        if (json_object_object_get_ex(device_files_o, "capture-devices", &capture_devices_o)) {
             pa_log_debug("[DEBUG_PARSE] ----------------- Capture Device Files ------------------");
             file_map->capture = parse_device_file_array_object(capture_devices_o);
         }
@@ -3022,7 +2990,7 @@ static pa_idxset* parse_device_type_infos() {
     pa_log_debug("\n[DEBUG_PARSE] ==================== Parse device types ====================");
     type_infos = pa_idxset_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);
 
-    if ((device_array_o = json_object_object_get(o, DEVICE_TYPE_OBJECT)) && json_object_is_type(device_array_o, json_type_array)) {
+    if (json_object_object_get_ex(o, DEVICE_TYPE_OBJECT, &device_array_o) && json_object_is_type(device_array_o, json_type_array)) {
         device_type_num = json_object_array_length(device_array_o);
         for (device_type_idx = 0; device_type_idx < device_type_num ; device_type_idx++) {
             json_object *device_o;
@@ -3034,7 +3002,7 @@ static pa_idxset* parse_device_type_infos() {
                 const char *device_type = NULL, *device_profile = NULL;
                 type_info = pa_xmalloc0(sizeof(struct device_type_info));
 
-                if ((device_prop_o = json_object_object_get(device_o, "device-type")) && json_object_is_type(device_prop_o, json_type_string)) {
+                if (json_object_object_get_ex(device_o, "device-type", &device_prop_o) && json_object_is_type(device_prop_o, json_type_string)) {
                     device_type = json_object_get_string(device_prop_o);
                     pa_log_debug("[DEBUG_PARSE] ---------------- Parse device '%s' ----------------", device_type);
                     type_info->type = device_type;
@@ -3042,7 +3010,7 @@ static pa_idxset* parse_device_type_infos() {
                     pa_log_error("Get device type failed");
                     goto failed;
                 }
-                if ((device_prop_o = json_object_object_get(device_o, "profile")) && json_object_is_type(device_prop_o, json_type_string)) {
+                if (json_object_object_get_ex(device_o, "profile", &device_prop_o) && json_object_is_type(device_prop_o, json_type_string)) {
                     device_profile = json_object_get_string(device_prop_o);
                     pa_log_debug("[DEBUG_PARSE] Profile: %s", device_profile);
                     type_info->profile = device_profile;
@@ -3051,7 +3019,7 @@ static pa_idxset* parse_device_type_infos() {
                 }
 
 
-                if ((device_prop_o = json_object_object_get(device_o, DEVICE_TYPE_PROP_BUILTIN)) && json_object_is_type(device_prop_o, json_type_boolean)) {
+                if (json_object_object_get_ex(device_o, DEVICE_TYPE_PROP_BUILTIN, &device_prop_o) && json_object_is_type(device_prop_o, json_type_boolean)) {
                     builtin = json_object_get_boolean(device_prop_o);
                     pa_log_debug("[DEBUG_PARSE] builtin: %d", builtin);
                     type_info->builtin = builtin;
@@ -3059,7 +3027,7 @@ static pa_idxset* parse_device_type_infos() {
                     pa_log_error("Get device prop '%s' failed", DEVICE_TYPE_PROP_BUILTIN);
                 }
 
-                if ((device_prop_o = json_object_object_get(device_o, DEVICE_TYPE_PROP_DIRECTION)) && json_object_is_type(device_prop_o, json_type_array)) {
+                if (json_object_object_get_ex(device_o, DEVICE_TYPE_PROP_DIRECTION, &device_prop_o) && json_object_is_type(device_prop_o, json_type_array)) {
                     const char *direction;
                     array_len = json_object_array_length(device_prop_o);
                     if ((array_len = json_object_array_length(device_prop_o)) > DEVICE_DIRECTION_MAX) {
@@ -3077,7 +3045,7 @@ static pa_idxset* parse_device_type_infos() {
                     pa_log_error("Get device prop '%s' failed", DEVICE_TYPE_PROP_DIRECTION);
                 }
 
-                if ((device_prop_o = json_object_object_get(device_o, "avail-condition")) && json_object_is_type(device_prop_o, json_type_array)) {
+                if (json_object_object_get_ex(device_o, "avail-condition", &device_prop_o) && json_object_is_type(device_prop_o, json_type_array)) {
                     const char *avail_cond;
                     if ((array_len = json_object_array_length(device_prop_o)) > DEVICE_AVAIL_COND_NUM_MAX) {
                         pa_log_error("Invalid case, The number of avail-condition is too big (%d)", array_len);
@@ -3094,12 +3062,12 @@ static pa_idxset* parse_device_type_infos() {
                     pa_log_error("Get device prop 'avail-condition' failed");
                 }
 
-                if ((device_prop_o = json_object_object_get(device_o, "playback-devices")) && json_object_is_type(device_prop_o, json_type_object)) {
+                if (json_object_object_get_ex(device_o, "playback-devices", &device_prop_o) && json_object_is_type(device_prop_o, json_type_object)) {
                     pa_log_debug("[DEBUG_PARSE] ------ playback devices ------");
                     type_info->playback_devices = parse_device_role_map(device_prop_o);
                 }
 
-                if ((device_prop_o = json_object_object_get(device_o, "capture-devices")) && json_object_is_type(device_prop_o, json_type_object)) {
+                if (json_object_object_get_ex(device_o, "capture-devices", &device_prop_o) && json_object_is_type(device_prop_o, json_type_object)) {
                     pa_log_debug("[DEBUG_PARSE] ------ capture devices ------");
                     type_info->capture_devices = parse_device_role_map(device_prop_o);
                 }
@@ -4193,7 +4161,6 @@ pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item,
 }
 
 int pa_device_manager_bt_sco_open(pa_device_manager *dm) {
-    struct device_status_info *status_info;
     dm_device *bt_device;
 
     pa_assert(dm);
@@ -4232,7 +4199,6 @@ void pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_bt_sco
 }
 
 int pa_device_manager_bt_sco_close(pa_device_manager *dm) {
-    struct device_status_info *status_info;
     dm_device *bt_device;
 
     pa_assert(dm);

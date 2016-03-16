@@ -223,7 +223,7 @@ enum signal_index {
     ((stream_type == STREAM_SINK_INPUT) ? (device_direction & DM_DEVICE_DIRECTION_OUT) : (device_direction & DM_DEVICE_DIRECTION_IN))
 
 /* PCM Dump */
-#define PA_DUMP_INI_DEFAULT_PATH                "/usr/etc/mmfw_audio_pcm_dump.ini"
+#define PA_DUMP_INI_DEFAULT_PATH                SYSCONFDIR"/multimedia/mmfw_audio_pcm_dump.ini" /* SYSCONFDIR is defined at .spec */
 #define PA_DUMP_INI_TEMP_PATH                   "/opt/system/mmfw_audio_pcm_dump.ini"
 #define PA_DUMP_VCONF_KEY                       "memory/private/sound/pcm_dump"
 #define PA_DUMP_PLAYBACK_DECODER_OUT            0x00000001

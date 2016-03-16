@@ -1,6 +1,6 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Pulseaudio modules for Tizen
-Version:          5.0.34
+Version:          5.0.35
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -29,7 +29,7 @@ This package contains pulseaudio modules for tizen audio system.
 %setup -q
 
 %build
-export CFLAGS="%{optflags} -fno-strict-aliasing"
+export CFLAGS="%{optflags} -fno-strict-aliasing -DSYSCONFDIR=\\\"%{_sysconfdir}\\\""
 
 export LD_AS_NEEDED=0
 %reconfigure --prefix=%{_prefix} \

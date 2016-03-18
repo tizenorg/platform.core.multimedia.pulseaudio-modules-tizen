@@ -221,6 +221,8 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
     bool is_found = 0;
     pa_usec_t creation_time = 0;
     pa_usec_t latest_creation_time = 0;
+    /* detect module-jack-sink or module-jack-source */
+    pa_module *m;
 
     pa_assert(c);
     pa_assert(data);
@@ -243,6 +245,19 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
         if (pa_streq(data->occupying_role, STREAM_ROLE_CALL_VOICE)) {
             data->device_role = DEVICE_ROLE_CALL_VOICE;
             pa_log_info("[SELECT] current occupying stream role is [%s], set deivce role to [%s]", data->occupying_role, data->device_role);
+        }
+    }
+
+    /* detect module-jack-sink or module-jack-source */
+    PA_IDXSET_FOREACH(m, u->core->modules, idx) {
+        if (pa_streq(m->name, "module-jack-sink") && data->stream_type == STREAM_SINK_INPUT) {
+            pa_log_info("[SELECT] found module-jack-sink");
+            *(data->proper_sink) = (pa_sink*)pa_namereg_get(u->core, "jack_out", PA_NAMEREG_SINK);  /* default sink */
+            return PA_HOOK_OK;
+        } else if (pa_streq(m->name, "module-jack-source") && data->stream_type == STREAM_SOURCE_OUTPUT) {
+            pa_log_info("[SELECT] found module-jack-source");
+            *(data->proper_source) = (pa_source*)pa_namereg_get(u->core, "jack_in", PA_NAMEREG_SOURCE);  /* default source */
+            return PA_HOOK_OK;
         }
     }
 

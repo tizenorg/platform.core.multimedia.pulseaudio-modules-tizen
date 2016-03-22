@@ -1,6 +1,6 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Pulseaudio modules for Tizen
-Version:          5.0.36
+Version:          8.0.00
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -53,5 +53,5 @@ export LD_AS_NEEDED=0
 %manifest pulseaudio-modules-tizen.manifest
 %defattr(-,root,root,-)
 %license LICENSE.LGPL-2.1+
-%{_libdir}/pulse-5.0/modules/module-*.so
-%{_libdir}/pulse-5.0/modules/libhal-manager.so
+%{_libdir}/pulse-8.0/modules/module-*.so
+%{_libdir}/pulse-8.0/modules/libhal-manager.so

@@ -638,7 +638,7 @@ static void update_loopback_module(struct userdata *u, pa_bool_t load) {
                                  u->loopback_args.sink->name, u->loopback_args.source->name,
                                  u->loopback_args.latency_msec, u->loopback_args.adjust_sec);
         if (u->module_loopback)
-            pa_module_unload(u->core, u->module_loopback, TRUE);
+            pa_module_unload(u->module_loopback, TRUE);
 
         u->module_loopback = pa_module_load(u->core, MODULE_LOOPBACK, args);
 
@@ -647,7 +647,7 @@ static void update_loopback_module(struct userdata *u, pa_bool_t load) {
 
     } else if (!load) {
         if (u->module_loopback) {
-            pa_module_unload(u->core, u->module_loopback, TRUE);
+            pa_module_unload(u->module_loopback, TRUE);
             u->module_loopback = NULL;
             u->loopback_args.sink = NULL;
             u->loopback_args.source = NULL;
@@ -771,7 +771,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 }
                 pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
             }
-            pa_module_unload(u->core, u->module_combine_sink, TRUE);
+            pa_module_unload(u->module_combine_sink, TRUE);
             u->module_combine_sink = NULL;
         }
 
@@ -860,7 +860,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                             pa_log_error("[ROUTE][AUTO] could not get combine_sink");
 
                         pa_log_debug("[ROUTE][AUTO] unload module[%s]", SINK_NAME_COMBINED);
-                        pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                        pa_module_unload(u->module_combine_sink, TRUE);
                         u->module_combine_sink = NULL;
                     }
                     break;
@@ -993,7 +993,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         pa_log_error("[ROUTE][AUTO_LAST_CONN] could not get combine_sink");
 
                     pa_log_info("[ROUTE][AUTO_LAST_CONN] unload module[%s]", SINK_NAME_COMBINED);
-                    pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                    pa_module_unload(u->module_combine_sink, TRUE);
                     u->module_combine_sink = NULL;
                 }
             }
@@ -1276,7 +1276,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                         }
                     }
                     pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                    pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                    pa_module_unload(u->module_combine_sink, TRUE);
                     u->module_combine_sink = NULL;
                 } else
                     pa_log_error("[CONN] could not get combine_sink");
@@ -1291,7 +1291,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                         }
                     }
                     pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                    pa_module_unload(u->core, u->module_combine_sink_for_ex, TRUE);
+                    pa_module_unload(u->module_combine_sink_for_ex, TRUE);
                     u->module_combine_sink_for_ex = NULL;
                 } else
                     pa_log_error("[CONN] could not get combine_sink_ex");
@@ -1943,9 +1943,9 @@ void pa__done(pa_module *m)
     if (!(u = m->userdata))
         return;
 
-    pa_module_unload(u->core, u->module_null_sink, TRUE);
+    pa_module_unload(u->module_null_sink, TRUE);
     u->module_null_sink = NULL;
-    pa_module_unload(u->core, u->module_null_source, TRUE);
+    pa_module_unload(u->module_null_source, TRUE);
     u->module_null_source = NULL;
 
 #ifdef HAVE_DBUS

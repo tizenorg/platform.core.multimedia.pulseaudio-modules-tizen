@@ -495,9 +495,9 @@ int32_t set_volume_level_with_new_data(pa_stream_manager *m, void *stream, strea
         }
         pa_cvolume_set(&cv, GET_STREAM_NEW_SAMPLE_SPEC(stream, stream_type).channels, pa_sw_volume_from_linear(volume_linear));
         if (stream_type == STREAM_SINK_INPUT)
-            pa_sink_input_new_data_set_volume((pa_sink_input_new_data*)stream, &cv, TRUE);
+            pa_sink_input_new_data_set_volume((pa_sink_input_new_data*)stream, &cv);
         else if (stream_type == STREAM_SOURCE_OUTPUT)
-            pa_source_output_new_data_set_volume((pa_source_output_new_data*)stream, &cv, TRUE);
+            pa_source_output_new_data_set_volume((pa_source_output_new_data*)stream, &cv);
     }
     pa_log_debug("set_volume_level_with_new_data() : stream_type[%d], volume_type[%s], level[%u], value[%f]",
                  stream_type, volume_type_str, volume_level, volume_linear);

@@ -17,7 +17,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-pulsemodlibexecdir= $(libdir)/pulse-5.0/modules
+pulsemodlibexecdir= $(libdir)/pulse-8.0/modules
 
 AM_CFLAGS = \
 	$(PTHREAD_CFLAGS)

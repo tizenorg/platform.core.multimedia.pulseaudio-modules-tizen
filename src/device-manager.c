@@ -1128,7 +1128,7 @@ static const char* build_params_to_load_device(const char *device_string, const 
         if (params) {
             pa_strbuf_printf(args_buf, "%s", params);
         }
-        strncpy(args, pa_strbuf_tostring_free(args_buf), DEVICE_PARAM_STRING_MAX);
+        strncpy(args, pa_strbuf_to_string_free(args_buf), DEVICE_PARAM_STRING_MAX);
     } else {
         return params;
     }

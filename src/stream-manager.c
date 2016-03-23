@@ -1038,6 +1038,7 @@ static void handle_get_current_volume_type(DBusConnection *conn, DBusMessage *ms
     stream_type_t stream_type = STREAM_SINK_INPUT;
     DBusMessage *reply = NULL;
     pa_stream_manager *m = (pa_stream_manager*)userdata;
+    uint32_t idx = 0;
 
     pa_assert(conn);
     pa_assert(msg);
@@ -1060,9 +1061,18 @@ static void handle_get_current_volume_type(DBusConnection *conn, DBusMessage *ms
         goto FAILURE;
     }
 
-    s = (stream_type == STREAM_SINK_INPUT) ? (void*)(m->cur_highest_priority.sink_input) : (void*)(m->cur_highest_priority.source_output);
-    if (s) {
+    if ((s = (stream_type == STREAM_SINK_INPUT) ? (void*)(m->cur_highest_priority.sink_input) : (void*)(m->cur_highest_priority.source_output)))
         type = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE);
+    else {
+        if (pa_idxset_size(m->core->sink_inputs)) {
+            PA_IDXSET_FOREACH(s, m->core->sink_inputs, idx) {
+                if ((type = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SINK_INPUT), PA_PROP_MEDIA_TIZEN_VOLUME_TYPE)))
+                    break;
+            }
+        }
+    }
+
+    if (type) {
         pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &type, DBUS_TYPE_INVALID));
         pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &stream_manager_dbus_ret_str[RET_MSG_INDEX_OK], DBUS_TYPE_INVALID));
     } else {

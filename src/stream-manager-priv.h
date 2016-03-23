@@ -48,9 +48,9 @@ typedef struct _stream_info {
 } stream_info;
 
 typedef struct _volume_info {
-    pa_bool_t is_hal_volume_type;
+    bool is_hal_volume_type;
     struct _values {
-        pa_bool_t is_muted;
+        bool is_muted;
         uint32_t current_level;
         pa_idxset *idx_volume_values;
     } values[STREAM_DIRECTION_MAX];
@@ -59,8 +59,8 @@ typedef struct _volume_info {
 typedef struct _prior_max_priority_stream {
     pa_sink_input *sink_input;
     pa_source_output *source_output;
-    pa_bool_t need_to_update_si;
-    pa_bool_t need_to_update_so;
+    bool need_to_update_si;
+    bool need_to_update_so;
     const char *role_si;
     const char *role_so;
 } cur_max_priority_stream;

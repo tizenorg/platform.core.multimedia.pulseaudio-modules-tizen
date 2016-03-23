@@ -50,7 +50,7 @@ typedef struct _hook_call_data_for_select {
     pa_sample_spec sample_spec;
     pa_idxset *idx_avail_devices;
     pa_idxset *idx_manual_devices;
-    pa_bool_t origins_from_new_data;
+    bool origins_from_new_data;
 } pa_stream_manager_hook_data_for_select;
 
 typedef struct _hook_call_data_for_route {
@@ -65,7 +65,7 @@ typedef struct _hook_call_data_for_route {
     pa_idxset *idx_avail_devices;
     pa_idxset *idx_manual_devices;
     pa_idxset *idx_streams;
-    pa_bool_t origins_from_new_data;
+    bool origins_from_new_data;
 } pa_stream_manager_hook_data_for_route;
 
 typedef struct _hook_call_data_for_option {
@@ -74,7 +74,7 @@ typedef struct _hook_call_data_for_option {
     int32_t value;
 } pa_stream_manager_hook_data_for_option;
 
-int32_t pa_stream_manager_get_route_type(void *stream, pa_bool_t origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
+int32_t pa_stream_manager_get_route_type(void *stream, bool origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c);
 void pa_stream_manager_done(pa_stream_manager* m);

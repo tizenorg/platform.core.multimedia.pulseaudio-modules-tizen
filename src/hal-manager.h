@@ -32,7 +32,7 @@ typedef struct _hal_stream_connection_info {
     const char *role;
     uint32_t direction;
     uint32_t idx;
-    pa_bool_t is_connected;
+    bool is_connected;
 } hal_stream_connection_info;
 
 typedef struct _hal_stream_info {

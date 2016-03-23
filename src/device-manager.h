@@ -49,7 +49,7 @@ typedef struct pa_device_manager pa_device_manager;
 typedef struct dm_device dm_device;
 
 typedef struct _hook_call_data_for_conn_changed {
-    pa_bool_t is_connected;
+    bool is_connected;
     dm_device *device;
 } pa_device_manager_hook_data_for_conn_changed;
 
@@ -75,7 +75,7 @@ const char* pa_device_manager_get_device_type(dm_device *device_item);
 const char* pa_device_manager_get_device_subtype(dm_device *device_item);
 dm_device_direction_t pa_device_manager_get_device_direction(dm_device *device_item);
 pa_usec_t pa_device_manager_get_device_creation_time(dm_device *device_item);
-pa_bool_t pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role);
+bool pa_device_manager_is_device_use_internal_codec(dm_device *device_item, dm_device_direction_t direction, const char *role);
 
 /* set/get device state */
 void pa_device_manager_set_device_state(dm_device *device_item, dm_device_direction_t direction, dm_device_state_t state);
@@ -93,4 +93,4 @@ int pa_device_manager_load_source(pa_device_manager *dm, const char *device_type
 int pa_device_manager_bt_sco_open(pa_device_manager *dm);
 void pa_device_manager_bt_sco_get_status(pa_device_manager *dm, dm_device_bt_sco_status_t *status);
 int pa_device_manager_bt_sco_close(pa_device_manager *dm);
-int pa_device_manager_bt_sco_get_property(pa_device_manager *dm, pa_bool_t *is_wide_band, pa_bool_t *nrec);
+int pa_device_manager_bt_sco_get_property(pa_device_manager *dm, bool *is_wide_band, bool *nrec);

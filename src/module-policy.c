@@ -33,11 +33,6 @@
 #include <pulsecore/sound-file.h>
 #include <pulsecore/play-memblockq.h>
 #include <pulsecore/shared.h>
-#ifdef HAVE_DBUS
-#include <pulsecore/dbus-shared.h>
-#include <pulsecore/dbus-util.h>
-#include <pulsecore/protocol-dbus.h>
-#endif
 
 #include "module-policy-symdef.h"
 #include "communicator.h"
@@ -48,7 +43,7 @@
 PA_MODULE_AUTHOR("Seungbae Shin");
 PA_MODULE_DESCRIPTION("Media Policy module");
 PA_MODULE_VERSION(PACKAGE_VERSION);
-PA_MODULE_LOAD_ONCE(TRUE);
+PA_MODULE_LOAD_ONCE(true);
 PA_MODULE_USAGE(" ");
 
 static const char* const valid_modargs[] = {
@@ -56,150 +51,6 @@ static const char* const valid_modargs[] = {
 };
 
 struct userdata;
-
-#ifdef HAVE_DBUS
-
-/*** Defines for module policy dbus interface ***/
-#define OBJECT_PATH "/org/pulseaudio/policy1"
-#define INTERFACE_POLICY "org.PulseAudio.Ext.Policy1"
-#define POLICY_INTROSPECT_XML                                               \
-    DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE                               \
-    "<node>"                                                                \
-    " <interface name=\"" INTERFACE_POLICY "\">"                            \
-    "  <method name=\"MethodTest1\">"                                       \
-    "   <arg name=\"arg1\" direction=\"in\" type=\"s\"/>"                   \
-    "   <arg name=\"arg2\" direction=\"out\" type=\"u\"/>"                  \
-    "  </method>"                                                           \
-    "  <method name=\"MethodTest2\">"                                       \
-    "   <arg name=\"arg1\" direction=\"in\" type=\"i\"/>"                   \
-    "   <arg name=\"arg2\" direction=\"in\" type=\"i\"/>"                   \
-    "   <arg name=\"arg3\" direction=\"out\" type=\"i\"/>"                  \
-    "  </method>"                                                           \
-    "  <property name=\"PropertyTest1\" type=\"i\" access=\"readwrite\"/>"  \
-    "  <property name=\"PropertyTest2\" type=\"s\" access=\"read\"/>"       \
-    "  <signal name=\"PropertyTest1Changed\">"                              \
-    "   <arg name=\"arg1\" type=\"i\"/>"                                    \
-    "  </signal>"                                                           \
-    "  <signal name=\"SignalTest2\">"                                       \
-    "   <arg name=\"arg1\" type=\"s\"/>"                                    \
-    "  </signal>"                                                           \
-    " </interface>"                                                         \
-    " <interface name=\"" DBUS_INTERFACE_INTROSPECTABLE "\">\n"             \
-    "  <method name=\"Introspect\">\n"                                      \
-    "   <arg name=\"data\" type=\"s\" direction=\"out\"/>\n"                \
-    "  </method>\n"                                                         \
-    " </interface>\n"                                                       \
-    " <interface name=\"" DBUS_INTERFACE_PROPERTIES "\">\n"                 \
-    "  <method name=\"Get\">\n"                                             \
-    "   <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"       \
-    "   <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"        \
-    "   <arg name=\"value\" type=\"v\" direction=\"out\"/>\n"               \
-    "  </method>\n"                                                         \
-    "  <method name=\"Set\">\n"                                             \
-    "   <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"       \
-    "   <arg name=\"property_name\" type=\"s\" direction=\"in\"/>\n"        \
-    "   <arg name=\"value\" type=\"v\" direction=\"in\"/>\n"                \
-    "  </method>\n"                                                         \
-    "  <method name=\"GetAll\">\n"                                          \
-    "   <arg name=\"interface_name\" type=\"s\" direction=\"in\"/>\n"       \
-    "   <arg name=\"props\" type=\"a{sv}\" direction=\"out\"/>\n"           \
-    "  </method>\n"                                                         \
-    " </interface>\n"                                                       \
-    "</node>"
-
-
-static DBusHandlerResult handle_get_property(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static DBusHandlerResult handle_get_all_property(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static DBusHandlerResult handle_set_property(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static DBusHandlerResult handle_policy_methods(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static DBusHandlerResult handle_introspect(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static DBusHandlerResult method_call_handler(DBusConnection *c, DBusMessage *m, void *userdata);
-static void endpoint_init(struct userdata *u);
-static void endpoint_done(struct userdata* u);
-
-/*** Called when module-policy load/unload ***/
-static void dbus_init(struct userdata* u);
-static void dbus_deinit(struct userdata* u);
-
-/*** Defines for Property handle ***/
-/* property handlers */
-static void handle_get_property_test1(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static void handle_set_property_test1(DBusConnection *conn, DBusMessage *msg, DBusMessageIter *iter, void *userdata);
-static void handle_get_property_test2(DBusConnection *conn, DBusMessage *msg, void *userdata);
-
-enum property_index {
-    PROPERTY_TEST1,
-    PROPERTY_TEST2,
-    PROPERTY_MAX
-};
-
-static pa_dbus_property_handler property_handlers[PROPERTY_MAX] = {
-    [PROPERTY_TEST1] = { .property_name = "PropertyTest1", .type = "i",
-                                 .get_cb = handle_get_property_test1,
-                                 .set_cb = handle_set_property_test1 },
-    [PROPERTY_TEST2] = { .property_name = "PropertyTest2", .type = "s",
-                                 .get_cb = handle_get_property_test2,
-                                 .set_cb = NULL },
-};
-
-
-/*** Defines for method handle ***/
-/* method handlers */
-static void handle_method_test1(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static void handle_method_test2(DBusConnection *conn, DBusMessage *msg, void *userdata);
-static void handle_get_all(DBusConnection *conn, DBusMessage *msg, void *userdata);
-
-enum method_handler_index {
-    METHOD_HANDLER_TEST1,
-    METHOD_HANDLER_TEST2,
-    METHOD_HANDLER_MAX
-};
-
-static pa_dbus_arg_info method1_args[] = { { "arg1",              "s",     "in" },
-                                             { "arg2",             "u",     "out" } };
-
-static pa_dbus_arg_info method2_args[] = { { "arg1",              "i",     "in" },
-                                             { "arg2",             "i",     "in" },
-                                             { "arg3",             "i",     "out" } };
-
-static const char* method_arg_signatures[] = { "s", "ii" };
-
-static pa_dbus_method_handler method_handlers[METHOD_HANDLER_MAX] = {
-    [METHOD_HANDLER_TEST1] = {
-        .method_name = "MethodTest1",
-        .arguments = method1_args,
-        .n_arguments = sizeof(method1_args) / sizeof(pa_dbus_arg_info),
-        .receive_cb = handle_method_test1 },
-    [METHOD_HANDLER_TEST2] = {
-        .method_name = "MethodTest2",
-        .arguments = method2_args,
-        .n_arguments = sizeof(method2_args) / sizeof(pa_dbus_arg_info),
-        .receive_cb = handle_method_test2 }
-};
-
-/*** Defines for signal send ***/
-static int watch_signals(struct userdata* u);
-static void unwatch_signals(struct userdata* u);
-static void send_prop1_changed_signal(struct userdata* u);
-
-enum signal_index {
-    SIGNAL_PROP_CHANGED,
-    SIGNAL_TEST2,
-    SIGNAL_MAX
-};
-
-/*** Defines for get signal ***/
-#define SOUND_SERVER_INTERFACE_NAME "org.tizen.soundserver.service"
-#define AUDIO_CLIENT_INTERFACE_NAME "org.tizen.audioclient.service"
-
-#define SOUND_SERVER_FILTER              \
-    "type='signal',"                    \
-    " interface='" SOUND_SERVER_INTERFACE_NAME "'"
-#define AUDIO_CLIENT_FILTER              \
-    "type='signal',"                    \
-    " interface='" AUDIO_CLIENT_INTERFACE_NAME "'"
-
-#endif
 
 /* Modules for dynamic loading */
 #define MODULE_COMBINE_SINK           "module-combine-sink"
@@ -279,11 +130,6 @@ struct userdata {
     pa_core *core;
     pa_module *module;
 
-#ifdef HAVE_DBUS
-    pa_dbus_connection *dbus_conn;
-    int32_t test_property1;
-#endif
-
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_select_proper_sink_or_source_slot;
@@ -329,10 +175,10 @@ static void __load_dump_config(struct userdata *u)
     vconf_dump |= iniparser_getboolean(dict, "pcm_dump:resampler_in", 0) ? PA_DUMP_PLAYBACK_RESAMPLER_IN : 0;
     vconf_dump |= iniparser_getboolean(dict, "pcm_dump:resampler_out", 0) ? PA_DUMP_PLAYBACK_RESAMPLER_OUT : 0;
     vconf_dump |= iniparser_getboolean(dict, "pcm_dump:encoder_in", 0) ? PA_DUMP_CAPTURE_ENCODER_IN : 0;
-    u->core->dump_sink = (pa_bool_t)iniparser_getboolean(dict, "pcm_dump:pa_sink", 0);
-    u->core->dump_sink_input = (pa_bool_t)iniparser_getboolean(dict, "pcm_dump:pa_sink_input", 0);
-    u->core->dump_source = (pa_bool_t)iniparser_getboolean(dict, "pcm_dump:pa_source", 0);
-    u->core->dump_source_output = (pa_bool_t)iniparser_getboolean(dict, "pcm_dump:pa_source_output", 0);
+    u->core->dump_sink = (bool)iniparser_getboolean(dict, "pcm_dump:pa_sink", 0);
+    u->core->dump_sink_input = (bool)iniparser_getboolean(dict, "pcm_dump:pa_sink_input", 0);
+    u->core->dump_source = (bool)iniparser_getboolean(dict, "pcm_dump:pa_source", 0);
+    u->core->dump_source_output = (bool)iniparser_getboolean(dict, "pcm_dump:pa_source_output", 0);
 
     iniparser_freedict(dict);
 
@@ -372,7 +218,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
     char *args = NULL;
     void *s = NULL;
     uint32_t s_idx = 0;
-    pa_bool_t is_found = 0;
+    bool is_found = 0;
     pa_usec_t creation_time = 0;
     pa_usec_t latest_creation_time = 0;
 
@@ -416,7 +262,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                     pa_log_debug("  -- type[%-16s], subtype[%-5s], direction[0x%x], id[%u]",
                                  dm_device_type, dm_device_subtype, dm_device_direction, dm_device_id);
                     if (pa_streq(device_type, dm_device_type) && IS_AVAILABLE_DIRECTION(data->stream_type, dm_device_direction)) {
-                        is_found = TRUE;
+                        is_found = true;
                         pa_log_info("  ** found a matched device: type[%-16s], direction[0x%x]", dm_device_type, dm_device_direction);
                         if (data->stream_type == STREAM_SINK_INPUT) {
                             if (data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL && u->module_combine_sink) {
@@ -481,12 +327,12 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                         pa_log_info("  ** found a matched device: type[%-16s], direction[0x%x]", device_type, dm_device_direction);
                         if (data->stream_type == STREAM_SINK_INPUT) {
                             if ((*(data->proper_sink)) == null_sink)
-                                pa_sink_input_move_to((pa_sink_input*)(data->stream), pa_device_manager_get_sink(device, data->device_role), FALSE);
+                                pa_sink_input_move_to((pa_sink_input*)(data->stream), pa_device_manager_get_sink(device, data->device_role), false);
                             else
                                 *(data->proper_sink) = pa_device_manager_get_sink(device, data->device_role);
                         } else {
                             if ((*(data->proper_source)) == null_source)
-                                pa_source_output_move_to((pa_source_output*)(data->stream), pa_device_manager_get_source(device, data->device_role), FALSE);
+                                pa_source_output_move_to((pa_source_output*)(data->stream), pa_device_manager_get_source(device, data->device_role), false);
                             else
                                 *(data->proper_source) = pa_device_manager_get_source(device, data->device_role);
                         }
@@ -530,7 +376,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                     sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK);
                                     PA_IDXSET_FOREACH(s, combine_sink_arg1->inputs, s_idx) {
                                         if (s == data->stream) {
-                                            pa_sink_input_move_to(s, sink, FALSE);
+                                            pa_sink_input_move_to(s, sink, false);
                                             pa_log_debug("  -- *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
                                             break;
                                         }
@@ -543,7 +389,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                 *(data->proper_sink) = sink;
                             else {
                                 if (((pa_sink_input*)(data->stream))->sink != sink)
-                                    pa_sink_input_move_to(data->stream, sink, FALSE);
+                                    pa_sink_input_move_to(data->stream, sink, false);
                                 }
 
                         } else if (data->stream_type == STREAM_SOURCE_OUTPUT) {
@@ -552,7 +398,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
                                     *(data->proper_source) = source;
                                 else {
                                     if (((pa_source_output*)(data->stream))->source != source)
-                                        pa_source_output_move_to(data->stream, source, FALSE);
+                                        pa_source_output_move_to(data->stream, source, false);
                                 }
                             } else
                                 pa_log_warn("  -- could not get source");
@@ -577,7 +423,7 @@ static pa_hook_result_t select_proper_sink_or_source_hook_cb(pa_core *c, pa_stre
 /* The state of a device using internal audio codec is handled here.
  * Regarding the state of an external device, those is handled in device-manager.c */
 static void set_device_state_if_using_internal_codec(dm_device *device, stream_type_t stream_type, dm_device_state_t device_state) {
-    pa_bool_t use_internal_codec = FALSE;
+    bool use_internal_codec = false;
     dm_device_direction_t direction;
 
     pa_assert(device);
@@ -591,7 +437,7 @@ static void set_device_state_if_using_internal_codec(dm_device *device, stream_t
 }
 
 /* Open/Close BT SCO if it is possible */
-static int update_bt_sco_state(pa_device_manager *dm, pa_bool_t open) {
+static int update_bt_sco_state(pa_device_manager *dm, bool open) {
     dm_device_bt_sco_status_t sco_status;
 
     pa_assert(dm);
@@ -624,7 +470,7 @@ static int update_bt_sco_state(pa_device_manager *dm, pa_bool_t open) {
 }
 
 /* Load/Unload module-loopback */
-static void update_loopback_module(struct userdata *u, pa_bool_t load) {
+static void update_loopback_module(struct userdata *u, bool load) {
     char *args = NULL;
 
     pa_assert(u);
@@ -638,7 +484,7 @@ static void update_loopback_module(struct userdata *u, pa_bool_t load) {
                                  u->loopback_args.sink->name, u->loopback_args.source->name,
                                  u->loopback_args.latency_msec, u->loopback_args.adjust_sec);
         if (u->module_loopback)
-            pa_module_unload(u->core, u->module_loopback, TRUE);
+            pa_module_unload(u->core, u->module_loopback, true);
 
         u->module_loopback = pa_module_load(u->core, MODULE_LOOPBACK, args);
 
@@ -647,7 +493,7 @@ static void update_loopback_module(struct userdata *u, pa_bool_t load) {
 
     } else if (!load) {
         if (u->module_loopback) {
-            pa_module_unload(u->core, u->module_loopback, TRUE);
+            pa_module_unload(u->core, u->module_loopback, true);
             u->module_loopback = NULL;
             u->loopback_args.sink = NULL;
             u->loopback_args.source = NULL;
@@ -713,7 +559,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
     pa_sink *combine_sink = NULL;
     pa_sink *null_sink = NULL;
     char *args = NULL;
-    pa_bool_t use_internal_codec = FALSE;
+    bool use_internal_codec = false;
     pa_usec_t creation_time = 0;
     pa_usec_t latest_creation_time = 0;
 
@@ -730,13 +576,13 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         /* unload module-loopback */
         if (u->module_loopback) {
             if (data->stream_type == STREAM_SINK_INPUT && u->loopback_args.sink->use_internal_codec) {
-                update_loopback_module(u, FALSE);
+                update_loopback_module(u, false);
             } else if (data->stream_type == STREAM_SOURCE_OUTPUT && u->loopback_args.source->use_internal_codec) {
-                update_loopback_module(u, FALSE);
+                update_loopback_module(u, false);
             }
         }
         /* update BT SCO: close */
-        update_bt_sco_state(u->device_manager, FALSE);
+        update_bt_sco_state(u->device_manager, false);
 
         /* get current connected devices */
         conn_devices = pa_device_manager_get_device_list(u->device_manager);
@@ -765,13 +611,13 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 pa_log_error("[ROUTE][RESET] could not get combine_sink(%p) or null_sink(%p)", combine_sink, null_sink);
             else {
                 PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
-                    pa_sink_input_move_to(s, null_sink, FALSE);
+                    pa_sink_input_move_to(s, null_sink, false);
                     pa_log_debug("[ROUTE][RESET] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                  s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
                 }
-                pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
+                pa_sink_suspend(combine_sink, true, PA_SUSPEND_USER);
             }
-            pa_module_unload(u->core, u->module_combine_sink, TRUE);
+            pa_module_unload(u->core, u->module_combine_sink, true);
             u->module_combine_sink = NULL;
         }
 
@@ -779,13 +625,13 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         /* unload module-loopback */
         if (u->module_loopback) {
             if (data->stream_type == STREAM_SINK_INPUT && u->loopback_args.sink->use_internal_codec) {
-                update_loopback_module(u, FALSE);
+                update_loopback_module(u, false);
             } else if (data->stream_type == STREAM_SOURCE_OUTPUT && u->loopback_args.source->use_internal_codec) {
-                update_loopback_module(u, FALSE);
+                update_loopback_module(u, false);
             }
         }
         /* update BT SCO: close */
-        update_bt_sco_state(u->device_manager, FALSE);
+        update_bt_sco_state(u->device_manager, false);
 
         /* get current connected devices */
         conn_devices = pa_device_manager_get_device_list(u->device_manager);
@@ -851,16 +697,16 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
                         if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
                             PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
-                                pa_sink_input_move_to(s, sink, FALSE);
+                                pa_sink_input_move_to(s, sink, false);
                                 pa_log_debug("[ROUTE][AUTO] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                              s, ((pa_sink_input*)s)->index, sink, sink->name);
                             }
-                            pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
+                            pa_sink_suspend(combine_sink, true, PA_SUSPEND_USER);
                         } else
                             pa_log_error("[ROUTE][AUTO] could not get combine_sink");
 
                         pa_log_debug("[ROUTE][AUTO] unload module[%s]", SINK_NAME_COMBINED);
-                        pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                        pa_module_unload(u->core, u->module_combine_sink, true);
                         u->module_combine_sink = NULL;
                     }
                     break;
@@ -888,7 +734,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                             if ((sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
                                 PA_IDXSET_FOREACH(s, combine_sink_arg1->inputs, s_idx) {
                                     if (s == data->stream) {
-                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_sink_input_move_to(s, sink, false);
                                         pa_log_debug("[ROUTE][AUTO_ALL] *** sink-nput(%p,%u) moves to sink(%p,%s)",
                                                      s, ((pa_sink_input*)s)->index, sink, sink->name);
                                     }
@@ -908,14 +754,14 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         /* move sink-inputs/source-outputs if needed */
                         if (data->idx_streams) {
                             PA_IDXSET_FOREACH(s, data->idx_streams, s_idx) { /* data->idx_streams: null_sink */
-                                if (!pa_stream_manager_get_route_type(s, FALSE, data->stream_type, &route_type) &&
+                                if (!pa_stream_manager_get_route_type(s, false, data->stream_type, &route_type) &&
                                     (route_type == STREAM_ROUTE_TYPE_AUTO_ALL)) {
                                     if ((data->stream_type == STREAM_SINK_INPUT) && (sink && (sink != ((pa_sink_input*)s)->sink))) {
-                                        pa_sink_input_move_to(s, sink, FALSE);
+                                        pa_sink_input_move_to(s, sink, false);
                                         pa_log_debug("[ROUTE][AUTO_ALL] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                                      s, ((pa_sink_input*)s)->index, sink, sink->name);
                                     } else if ((data->stream_type == STREAM_SOURCE_OUTPUT) && (source && (source != ((pa_source_output*)s)->source))) {
-                                        pa_source_output_move_to(s, source, FALSE);
+                                        pa_source_output_move_to(s, source, false);
                                         pa_log_debug("[ROUTE][AUTO_ALL] *** source-output(%p,%u) moves to source(%p,%s)",
                                                      s, ((pa_source_output*)s)->index, source, source->name);
                                     }
@@ -984,16 +830,16 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 if (data->stream_type == STREAM_SINK_INPUT && u->module_combine_sink) {
                     if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK))) {
                         PA_IDXSET_FOREACH(s, combine_sink->inputs, s_idx) {
-                            pa_sink_input_move_to(s, sink, FALSE);
+                            pa_sink_input_move_to(s, sink, false);
                             pa_log_debug("[ROUTE][AUTO_LAST_CONN] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                          s, ((pa_sink_input*)s)->index, sink, sink->name);
                         }
-                        pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
+                        pa_sink_suspend(combine_sink, true, PA_SUSPEND_USER);
                     } else
                         pa_log_error("[ROUTE][AUTO_LAST_CONN] could not get combine_sink");
 
                     pa_log_info("[ROUTE][AUTO_LAST_CONN] unload module[%s]", SINK_NAME_COMBINED);
-                    pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                    pa_module_unload(u->core, u->module_combine_sink, true);
                     u->module_combine_sink = NULL;
                 }
             }
@@ -1002,11 +848,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         if (data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL && route_info.num_of_devices) {
             /* set other device's state to deactivated */
             PA_IDXSET_FOREACH(_device, conn_devices, conn_idx) {
-                pa_bool_t need_to_deactive = TRUE;
+                bool need_to_deactive = true;
                 dm_device_id = pa_device_manager_get_device_id(_device);
                 for (i = 0; i < route_info.num_of_devices; i++) {
                     if (dm_device_id == route_info.device_infos[i].id) {
-                        need_to_deactive = FALSE;
+                        need_to_deactive = false;
                         break;
                     }
                 }
@@ -1032,13 +878,13 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         /* Check for BT SCO in case of call routing */
                         if (pa_streq(route_info.role, STREAM_ROLE_CALL_VOICE) && pa_streq(dm_device_type, DEVICE_TYPE_BT)) {
                             /* update BT SCO: open */
-                            if (update_bt_sco_state(u->device_manager, TRUE)) {
+                            if (update_bt_sco_state(u->device_manager, true)) {
                                 pa_log_error("  ** could not open BT SCO");
                                 continue;
                             }
                         } else {
                             /* update BT SCO: close */
-                            update_bt_sco_state(u->device_manager, FALSE);
+                            update_bt_sco_state(u->device_manager, false);
                         }
                         /* Check for in/out devices in case of loopback */
                         if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
@@ -1071,7 +917,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
             /* load module-loopback */
             if (u->loopback_args.sink && u->loopback_args.source)
-                update_loopback_module(u, TRUE);
+                update_loopback_module(u, true);
         }
     }
 
@@ -1098,11 +944,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
             if (streams) {
                 PA_IDXSET_FOREACH(s, streams, idx) {
                     if (data->stream_type == STREAM_SINK_INPUT) {
-                        pa_sink_input_move_to(s, dst_sink, FALSE);
+                        pa_sink_input_move_to(s, dst_sink, false);
                         pa_log_debug("[ROUTE][CALL-VOICE] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                      s, ((pa_sink_input*)s)->index, dst_sink, dst_sink->name);
                     } else if (data->stream_type == STREAM_SOURCE_OUTPUT) {
-                        pa_source_output_move_to(s, dst_source, FALSE);
+                        pa_source_output_move_to(s, dst_source, false);
                         pa_log_debug("[ROUTE][CALL-VOICE] *** source-output(%p,%u) moves to source(%p,%s)",
                                      s, ((pa_source_output*)s)->index, dst_source, dst_source->name);
                     }
@@ -1139,11 +985,11 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     if (((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK)) &&
                         ((pa_sink_input*)s)->sink == combine_sink))
                         break;
-                    pa_sink_input_move_to(s, sink, FALSE);
+                    pa_sink_input_move_to(s, sink, false);
                     pa_log_debug("[ROUTE][ROLLBACK] *** sink-input(%p,%u) moves to sink(%p,%s)",
                                  s, ((pa_sink_input*)s)->index, sink, sink->name);
                 } else if (source && source != ((pa_source_output*)s)->source) {
-                    pa_source_output_move_to(s, source, FALSE);
+                    pa_source_output_move_to(s, source, false);
                     pa_log_debug("[ROUTE][ROLLBACK] *** source-output(%p,%u) moves to source(%p,%s)",
                                  s, ((pa_source_output*)s)->index, source, source->name);
                 }
@@ -1184,7 +1030,7 @@ static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manage
 }
 
 /* Update ref. count of each connected device */
-static void update_connected_devices(const char *device_type, dm_device_direction_t direction, pa_bool_t is_connected) {
+static void update_connected_devices(const char *device_type, dm_device_direction_t direction, bool is_connected) {
     int32_t val = 0;
     int* ptr_in = NULL;
     int* ptr_out = NULL;
@@ -1227,7 +1073,7 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
     pa_sink *sink = NULL;
     pa_sink *null_sink = NULL;
     pa_sink *combine_sink = NULL;
-    pa_bool_t use_internal_codec = FALSE;
+    bool use_internal_codec = false;
     pa_idxset* conn_devices = NULL;
     dm_device* device = NULL;
 
@@ -1271,12 +1117,12 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                             sink = null_sink;
                         PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
                             /* re-routing this stream to the remaining device using internal codec */
-                            pa_sink_input_move_to(s, sink, FALSE);
+                            pa_sink_input_move_to(s, sink, false);
                             pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, sink, sink->name);
                         }
                     }
-                    pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                    pa_module_unload(u->core, u->module_combine_sink, TRUE);
+                    pa_sink_suspend(combine_sink, true, PA_SUSPEND_USER);
+                    pa_module_unload(u->core, u->module_combine_sink, true);
                     u->module_combine_sink = NULL;
                 } else
                     pa_log_error("[CONN] could not get combine_sink");
@@ -1286,12 +1132,12 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
                 if ((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED_EX, PA_NAMEREG_SINK))) {
                     if (combine_sink->inputs) {
                         PA_IDXSET_FOREACH(s, combine_sink->inputs, idx) {
-                            pa_sink_input_move_to(s, null_sink, FALSE);
+                            pa_sink_input_move_to(s, null_sink, false);
                             pa_log_debug("[CONN] *** sink-input(%p,%u) moves to sink(%p,%s)", s, ((pa_sink_input*)s)->index, null_sink, null_sink->name);
                         }
                     }
-                    pa_sink_suspend(combine_sink, TRUE, PA_SUSPEND_USER);
-                    pa_module_unload(u->core, u->module_combine_sink_for_ex, TRUE);
+                    pa_sink_suspend(combine_sink, true, PA_SUSPEND_USER);
+                    pa_module_unload(u->core, u->module_combine_sink_for_ex, true);
                     u->module_combine_sink_for_ex = NULL;
                 } else
                     pa_log_error("[CONN] could not get combine_sink_ex");
@@ -1299,13 +1145,13 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
             /* unload loopback module */
             if (u->module_loopback)
                 if (u->loopback_args.sink == pa_device_manager_get_sink(conn->device, DEVICE_ROLE_NORMAL))
-                    update_loopback_module(u, FALSE);
+                    update_loopback_module(u, false);
         }
     if (device_direction & DM_DEVICE_DIRECTION_IN) {
         /* unload loopback module */
         if (u->module_loopback)
             if (u->loopback_args.source == pa_device_manager_get_source(conn->device, DEVICE_ROLE_NORMAL))
-                update_loopback_module(u, FALSE);
+                update_loopback_module(u, false);
         }
     }
 
@@ -1344,523 +1190,6 @@ static pa_hook_result_t device_info_changed_hook_cb(pa_core *c, pa_device_manage
     return PA_HOOK_OK;
 }
 
-#ifdef HAVE_DBUS
-static void _do_something1(char* arg1, int arg2, void *data)
-{
-    pa_assert(data);
-    pa_assert(arg1);
-
-    pa_log_debug("Do Something 1 , arg1 (%s) arg2 (%d)", arg1, arg2);
-}
-
-static void _do_something2(char* arg1, void *data)
-{
-    pa_assert(data);
-    pa_assert(arg1);
-
-    pa_log_debug("Do Something 2 , arg1 (%s) ", arg1);
-}
-
-static void handle_get_property_test1(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    struct userdata *u = userdata;
-    dbus_int32_t value_i = 0;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(u);
-
-    value_i = u->test_property1;
-
-    pa_dbus_send_basic_value_reply(conn, msg, DBUS_TYPE_INT32, &value_i);
-}
-
-static void handle_set_property_test1(DBusConnection *conn, DBusMessage *msg, DBusMessageIter *iter, void *userdata)
-{
-    struct userdata *u = userdata;
-    dbus_int32_t value_i = 0;
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(u);
-
-    dbus_message_iter_get_basic(iter, &value_i);
-
-    u->test_property1 = value_i;
-    pa_dbus_send_empty_reply(conn, msg);
-
-    /* send signal to notify change of property1*/
-    send_prop1_changed_signal(u);
-}
-
-/* test property handler : return module name */
-static void handle_get_property_test2(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    struct userdata *u = userdata;
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(u);
-
-    if (!u->module->name) {
-        pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_ARGS, "property(module name) null");
-        return;
-    }
-
-    pa_dbus_send_basic_value_reply(conn, msg, DBUS_TYPE_STRING, &u->module->name);
-}
-
-static void handle_get_all(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    struct userdata *u = userdata;
-    dbus_int32_t value_i = 0;
-
-    DBusMessage *reply = NULL;
-    DBusMessageIter msg_iter;
-    DBusMessageIter dict_iter;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(u);
-
-    pa_assert_se((reply = dbus_message_new_method_return(msg)));
-
-    value_i = u->test_property1;
-
-    dbus_message_iter_init_append(reply, &msg_iter);
-    pa_assert_se(dbus_message_iter_open_container(&msg_iter, DBUS_TYPE_ARRAY, "{sv}", &dict_iter));
-
-    pa_dbus_append_basic_variant_dict_entry(&dict_iter, property_handlers[PROPERTY_TEST1].property_name, DBUS_TYPE_INT32, &value_i);
-    pa_dbus_append_basic_variant_dict_entry(&dict_iter, property_handlers[PROPERTY_TEST2].property_name, DBUS_TYPE_STRING, &u->module->name);
-    pa_assert_se(dbus_message_iter_close_container(&msg_iter, &dict_iter));
-    pa_assert_se(dbus_connection_send(conn, reply, NULL));
-    dbus_message_unref(reply);
-}
-
-/* test method : return length of argument string */
-static void handle_method_test1(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    const char* arg1_s = NULL;
-    dbus_uint32_t value_u = 0;
-    pa_assert(conn);
-    pa_assert(msg);
-
-    pa_assert_se(dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &arg1_s, DBUS_TYPE_INVALID));
-    value_u = strlen(arg1_s);
-    pa_dbus_send_basic_value_reply(conn, msg, DBUS_TYPE_UINT32, &value_u);
-}
-
-static void handle_method_test2(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    dbus_int32_t value1, value2, result;
-    pa_assert(conn);
-    pa_assert(msg);
-
-    pa_assert_se(dbus_message_get_args(msg, NULL,
-                                       DBUS_TYPE_INT32, &value1,
-                                       DBUS_TYPE_INT32, &value2,
-                                       DBUS_TYPE_INVALID));
-
-    result = value1 * value2;
-
-    pa_dbus_send_basic_value_reply(conn, msg, DBUS_TYPE_INT32, &result);
-}
-
-static DBusMessage* _generate_basic_property_change_signal_msg(int property_index, int property_type, void *data) {
-    DBusMessage *signal_msg;
-    DBusMessageIter signal_iter, dict_iter;
-    const char *interface = INTERFACE_POLICY;
-
-    /* org.freedesktop.DBus.Properties.PropertiesChanged (
-           STRING interface_name,
-           DICT<STRING,VARIANT> changed_properties,
-           ARRAY<STRING> invalidated_properties); */
-
-    pa_assert_se(signal_msg = dbus_message_new_signal(OBJECT_PATH, DBUS_INTERFACE_PROPERTIES, SIGNAL_PROP_CHANGED));
-    dbus_message_iter_init_append(signal_msg, &signal_iter);
-
-    /* STRING interface_name */
-    dbus_message_iter_append_basic(&signal_iter, DBUS_TYPE_STRING, &interface);
-
-    /* DICT<STRING,VARIANT> changed_properties */
-    pa_assert_se(dbus_message_iter_open_container(&signal_iter, DBUS_TYPE_ARRAY, "{sv}", &dict_iter));
-    pa_dbus_append_basic_variant_dict_entry(&dict_iter, property_handlers[property_index].property_name,
-                                            property_type, data);
-    dbus_message_iter_close_container(&signal_iter, &dict_iter);
-
-    /* ARRAY<STRING> invalidated_properties (empty) */
-    dbus_message_iter_open_container(&signal_iter, DBUS_TYPE_ARRAY, "s", &dict_iter);
-    dbus_message_iter_close_container(&signal_iter, &dict_iter);
-
-    return signal_msg;
-}
-
-static void send_prop1_changed_signal(struct userdata* u) {
-    DBusMessage *signal_msg = _generate_basic_property_change_signal_msg(PROPERTY_TEST1, DBUS_TYPE_INT32, &u->test_property1);
-
-#ifdef USE_DBUS_PROTOCOL
-    pa_dbus_protocol_send_signal(u->dbus_protocol, signal_msg);
-#else
-    dbus_connection_send(pa_dbus_connection_get(u->dbus_conn), signal_msg, NULL);
-#endif
-
-    dbus_message_unref(signal_msg);
-}
-
-static DBusHandlerResult dbus_filter_audio_handler(DBusConnection *c, DBusMessage *s, void *userdata)
-{
-    DBusError error;
-    char* arg_s = NULL;
-    int arg_i = 0;
-
-    pa_assert(userdata);
-
-    if (dbus_message_get_type(s) != DBUS_MESSAGE_TYPE_SIGNAL)
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-
-    pa_log_info("Audio handler received msg");
-    dbus_error_init(&error);
-
-    if (dbus_message_is_signal(s, SOUND_SERVER_INTERFACE_NAME, "TestSignalFromSS1")) {
-        if (!dbus_message_get_args(s, NULL,
-            DBUS_TYPE_STRING, &arg_s,
-            DBUS_TYPE_INT32, &arg_i ,
-            DBUS_TYPE_INVALID)) {
-            goto fail;
-        } else {
-            _do_something1(arg_s, arg_i, userdata);
-        }
-    } else if (dbus_message_is_signal(s, SOUND_SERVER_INTERFACE_NAME, "TestSignalFromSS2")) {
-        if (!dbus_message_get_args(s, NULL,
-            DBUS_TYPE_STRING, &arg_s,
-            DBUS_TYPE_INVALID)) {
-            goto fail;
-        } else {
-            _do_something2(arg_s, userdata);
-        }
-    } else if (dbus_message_is_signal(s, AUDIO_CLIENT_INTERFACE_NAME, "TestSignalFromClient1")) {
-        if (!dbus_message_get_args(s, NULL,
-            DBUS_TYPE_STRING, &arg_s,
-            DBUS_TYPE_INVALID)) {
-            goto fail;
-        } else {
-            _do_something2(arg_s, userdata);
-        }
-    } else {
-        pa_log_info("Unknown message, not handle it");
-        dbus_error_free(&error);
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-    }
-
-    pa_log_debug("Dbus Message handled");
-
-    dbus_error_free(&error);
-    return DBUS_HANDLER_RESULT_HANDLED;
-
-fail:
-    pa_log_error("Fail to handle dbus signal");
-    dbus_error_free(&error);
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusHandlerResult handle_get_property(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    int prop_idx = 0;
-    const char *interface_name, *property_name;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(userdata);
-
-    if (pa_streq(dbus_message_get_signature(msg), "ss")) {
-        pa_assert_se(dbus_message_get_args(msg, NULL,
-                                           DBUS_TYPE_STRING, &interface_name,
-                                           DBUS_TYPE_STRING, &property_name,
-                                           DBUS_TYPE_INVALID));
-        if (pa_streq(interface_name, INTERFACE_POLICY)) {
-            for (prop_idx = 0; prop_idx < PROPERTY_MAX; prop_idx++) {
-                if (pa_streq(property_name, property_handlers[prop_idx].property_name)) {
-                    property_handlers[prop_idx].get_cb(conn, msg, userdata);
-                    return DBUS_HANDLER_RESULT_HANDLED;
-                }
-            }
-        }
-       else {
-            pa_log_warn("Not our interface, not handle it");
-        }
-    } else {
-        pa_log_warn("Wrong Signature");
-        pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ss)");
-    }
-
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusHandlerResult handle_get_all_property(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    const char *interface_name;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(userdata);
-
-    if (pa_streq(dbus_message_get_signature(msg), "s")) {
-        pa_assert_se(dbus_message_get_args(msg, NULL,
-                                           DBUS_TYPE_STRING, &interface_name,
-                                           DBUS_TYPE_INVALID));
-        if (pa_streq(interface_name, INTERFACE_POLICY)) {
-            handle_get_all(conn, msg, userdata);
-            return DBUS_HANDLER_RESULT_HANDLED;
-        }
-       else {
-            pa_log_warn("Not our interface, not handle it");
-        }
-    } else {
-        pa_log_warn("Wrong Signature");
-        pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ss)");
-    }
-
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusHandlerResult handle_set_property(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    int prop_idx = 0;
-    const char *interface_name, *property_name, *property_sig;
-    DBusMessageIter msg_iter;
-    DBusMessageIter variant_iter;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(userdata);
-
-    if (pa_streq(dbus_message_get_signature(msg), "ssv")) {
-        pa_assert_se(dbus_message_iter_init(msg, &msg_iter));
-        dbus_message_iter_get_basic(&msg_iter, &interface_name);
-        pa_assert_se(dbus_message_iter_next(&msg_iter));
-        dbus_message_iter_get_basic(&msg_iter, &property_name);
-        pa_assert_se(dbus_message_iter_next(&msg_iter));
-
-        dbus_message_iter_recurse(&msg_iter, &variant_iter);
-
-        property_sig = dbus_message_iter_get_signature(&variant_iter);
-
-        if (pa_streq(interface_name, INTERFACE_POLICY)) {
-            for (prop_idx = 0; prop_idx < PROPERTY_MAX; prop_idx++) {
-                if (pa_streq(property_name, property_handlers[prop_idx].property_name)) {
-                    if (pa_streq(property_handlers[prop_idx].type, property_sig)) {
-                        property_handlers[prop_idx].set_cb(conn, msg, &variant_iter, userdata);
-                        return DBUS_HANDLER_RESULT_HANDLED;
-                    }
-                   else {
-                        pa_log_warn("Wrong Property Signature");
-                        pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ssv)");
-                    }
-                    break;
-                }
-            }
-        }
-       else {
-            pa_log_warn("Not our interface, not handle it");
-        }
-    } else {
-        pa_log_warn("Wrong Signature");
-        pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected (ssv)");
-    }
-
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusHandlerResult handle_policy_methods(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    int method_idx = 0;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(userdata);
-
-    for (method_idx = 0; method_idx < METHOD_HANDLER_MAX; method_idx++) {
-        if (dbus_message_is_method_call(msg, INTERFACE_POLICY, method_handlers[method_idx].method_name)) {
-            if (pa_streq(dbus_message_get_signature(msg), method_arg_signatures[method_idx])) {
-                method_handlers[method_idx].receive_cb(conn, msg, userdata);
-                return DBUS_HANDLER_RESULT_HANDLED;
-            }
-           else {
-                pa_log_warn("Wrong Argument Signature");
-                pa_dbus_send_error(conn, msg, DBUS_ERROR_INVALID_SIGNATURE,  "Wrong Signature, Expected %s", method_arg_signatures[method_idx]);
-                return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-            }
-        }
-    }
-
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusHandlerResult handle_introspect(DBusConnection *conn, DBusMessage *msg, void *userdata)
-{
-    const char *xml = POLICY_INTROSPECT_XML;
-    DBusMessage *r = NULL;
-
-    pa_assert(conn);
-    pa_assert(msg);
-    pa_assert(userdata);
-
-    pa_assert_se(r = dbus_message_new_method_return(msg));
-    pa_assert_se(dbus_message_append_args(r, DBUS_TYPE_STRING, &xml, DBUS_TYPE_INVALID));
-
-    if (r) {
-        pa_assert_se(dbus_connection_send((conn), r, NULL));
-        dbus_message_unref(r);
-    }
-
-    return DBUS_HANDLER_RESULT_HANDLED;
-}
-
-static DBusHandlerResult method_call_handler(DBusConnection *c, DBusMessage *m, void *userdata)
-{
-    struct userdata *u = userdata;
-    const char *path, *interface, *member;
-
-    pa_assert(c);
-    pa_assert(m);
-    pa_assert(u);
-
-    path = dbus_message_get_path(m);
-    interface = dbus_message_get_interface(m);
-    member = dbus_message_get_member(m);
-
-    pa_log_debug("dbus: path=%s, interface=%s, member=%s", path, interface, member);
-
-    if (!pa_streq(path, OBJECT_PATH))
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-
-    if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Introspectable", "Introspect")) {
-        return handle_introspect(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Get")) {
-        return handle_get_property(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "Set")) {
-        return  handle_set_property(c, m, u);
-    } else if (dbus_message_is_method_call(m, "org.freedesktop.DBus.Properties", "GetAll")) {
-        return handle_get_all_property(c, m, u);
-    } else {
-        return handle_policy_methods(c, m, u);
-    }
-
-    return DBUS_HANDLER_RESULT_HANDLED;
-}
-
-static void endpoint_init(struct userdata *u)
-{
-    static const DBusObjectPathVTable vtable_endpoint = {
-        .message_function = method_call_handler,
-    };
-
-    pa_log_debug("Dbus endpoint init");
-
-    if (u && u->dbus_conn) {
-        if (!dbus_connection_register_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH, &vtable_endpoint, u))
-            pa_log_error("Failed to register object path");
-    } else {
-        pa_log_error("Cannot get dbus connection to register object path");
-    }
-}
-
-static void endpoint_done(struct userdata* u)
-{
-    pa_log_debug("Dbus endpoint done");
-    if (u && u->dbus_conn) {
-        if (!dbus_connection_unregister_object_path(pa_dbus_connection_get(u->dbus_conn), OBJECT_PATH))
-            pa_log_error("Failed to unregister object path");
-    } else {
-        pa_log_error("Cannot get dbus connection to unregister object path");
-    }
-}
-
-static int watch_signals(struct userdata* u)
-{
-    DBusError error;
-
-    dbus_error_init(&error);
-
-    pa_log_debug("Watch Dbus signals");
-
-    if (u && u->dbus_conn) {
-
-        if (!dbus_connection_add_filter(pa_dbus_connection_get(u->dbus_conn), dbus_filter_audio_handler, u, NULL)) {
-            pa_log_error("Unable to add D-Bus filter : %s: %s", error.name, error.message);
-            goto fail;
-        }
-
-        if (pa_dbus_add_matches(pa_dbus_connection_get(u->dbus_conn), &error, SOUND_SERVER_FILTER, AUDIO_CLIENT_FILTER, NULL) < 0) {
-            pa_log_error("Unable to subscribe to signals: %s: %s", error.name, error.message);
-            goto fail;
-        }
-        return 0;
-    }
-
-fail:
-    dbus_error_free(&error);
-    return -1;
-}
-
-static void unwatch_signals(struct userdata* u)
-{
-    pa_log_debug("Unwatch Dbus signals");
-
-    if (u && u->dbus_conn) {
-        pa_dbus_remove_matches(pa_dbus_connection_get(u->dbus_conn), SOUND_SERVER_FILTER, AUDIO_CLIENT_FILTER, NULL);
-        dbus_connection_remove_filter(pa_dbus_connection_get(u->dbus_conn), dbus_filter_audio_handler, u);
-    }
-}
-
-
-
-static void dbus_init(struct userdata* u)
-{
-    DBusError error;
-    pa_dbus_connection *connection = NULL;
-
-    pa_log_debug("Dbus init");
-    dbus_error_init(&error);
-
-    if (!(connection = pa_dbus_bus_get(u->core, DBUS_BUS_SYSTEM, &error)) || dbus_error_is_set(&error)) {
-        if (connection) {
-            pa_dbus_connection_unref(connection);
-        }
-        pa_log_error("Unable to contact D-Bus system bus: %s: %s", error.name, error.message);
-        goto fail;
-    } else {
-        pa_log_debug("Got dbus connection");
-    }
-
-    u->dbus_conn = connection;
-
-    if (watch_signals(u) < 0)
-        pa_log_error("dbus watch signals failed");
-    else
-        pa_log_debug("dbus ready to get signals");
-
-    endpoint_init(u);
-
-fail:
-    dbus_error_free(&error);
-
-}
-
-static void dbus_deinit(struct userdata* u)
-{
-    pa_log_debug("Dbus deinit");
-    if (u) {
-
-        endpoint_done(u);
-        unwatch_signals(u);
-
-        if (u->dbus_conn) {
-            pa_dbus_connection_unref(u->dbus_conn);
-            u->dbus_conn = NULL;
-        }
-    }
-}
-#endif
-
 int pa__init(pa_module *m)
 {
     pa_modargs *ma = NULL;
@@ -1878,15 +1207,9 @@ int pa__init(pa_module *m)
     u->core = m->core;
     u->module = m;
 
-#ifdef HAVE_DBUS
-    u->dbus_conn = NULL;
-    u->test_property1 = 123;
-#endif
-
     u->hal_manager = pa_hal_manager_get(u->core);
 
-    u->communicator.comm = pa_communicator_get(u->core);
-    if (u->communicator.comm) {
+    if ((u->communicator.comm = pa_communicator_get(u->core))) {
         u->communicator.comm_hook_select_proper_sink_or_source_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_SELECT_INIT_SINK_OR_SOURCE),
                 PA_HOOK_EARLY, (pa_hook_cb_t)select_proper_sink_or_source_hook_cb, u);
@@ -1917,10 +1240,6 @@ int pa__init(pa_module *m)
 
     __load_dump_config(u);
 
-#ifdef HAVE_DBUS
-    dbus_init(u);
-#endif
-
     pa_log_info("policy module is loaded\n");
 
     if (ma)
@@ -1943,14 +1262,11 @@ void pa__done(pa_module *m)
     if (!(u = m->userdata))
         return;
 
-    pa_module_unload(u->core, u->module_null_sink, TRUE);
+    pa_module_unload(u->core, u->module_null_sink, true);
     u->module_null_sink = NULL;
-    pa_module_unload(u->core, u->module_null_source, TRUE);
+    pa_module_unload(u->core, u->module_null_source, true);
     u->module_null_source = NULL;
 
-#ifdef HAVE_DBUS
-    dbus_deinit(u);
-#endif
     if (u->device_manager)
         pa_device_manager_unref(u->device_manager);
 

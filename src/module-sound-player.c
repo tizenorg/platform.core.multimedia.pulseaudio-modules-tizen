@@ -55,7 +55,7 @@
 PA_MODULE_AUTHOR("Sangchul Lee");
 PA_MODULE_DESCRIPTION("Sound Player module");
 PA_MODULE_VERSION(PACKAGE_VERSION);
-PA_MODULE_LOAD_ONCE(TRUE);
+PA_MODULE_LOAD_ONCE(true);
 
 #ifdef HAVE_DBUS
 #define ARR_ARG_MAX  32
@@ -550,7 +550,7 @@ fail:
     u->module->core->mainloop->io_free(u->io);
     u->io = NULL;
 
-    pa_module_unload_request(u->module, TRUE);
+    pa_module_unload_request(u->module, true);
 }
 
 static pa_hook_result_t sink_input_unlink_cb(pa_core *core, pa_sink_input *i, struct userdata *u) {

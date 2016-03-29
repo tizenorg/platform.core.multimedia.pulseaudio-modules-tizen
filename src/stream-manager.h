@@ -31,11 +31,11 @@ typedef enum _stream_type {
 } stream_type_t;
 
 typedef enum stream_route_type {
-    STREAM_ROUTE_TYPE_AUTO,               /* the policy of decision device(s) is automatic and it's routing path is particular to one device based on priority */
-    STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED,/* the policy of decision device(s) is automatic and it's routing path is particular to one device based on connected time */
-    STREAM_ROUTE_TYPE_AUTO_ALL,           /* the policy of decision device(s) is automatic and it's routing path can be several devices */
-    STREAM_ROUTE_TYPE_MANUAL,             /* the policy of decision device(s) is manual */
-    STREAM_ROUTE_TYPE_MANUAL_EXT,         /* the policy of decision device(s) is manual and it's routing path is for only external devices */
+    STREAM_ROUTE_TYPE_AUTO,               /* A stream is routed automatically to a particular device which has the highest priority. */
+    STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED,/* A stream is routed automatically to a particular device which has the latest connection time. */
+    STREAM_ROUTE_TYPE_AUTO_ALL,           /* A stream is routed automatically to several devices simultaneously. */
+    STREAM_ROUTE_TYPE_MANUAL,             /* A stream is routed manually to the device(s) selected by user. */
+    STREAM_ROUTE_TYPE_MANUAL_EXT,         /* A stream is routed manually only to the external device(s) selected by user. */
 } stream_route_type_t;
 
 typedef struct _hook_call_data_for_select {

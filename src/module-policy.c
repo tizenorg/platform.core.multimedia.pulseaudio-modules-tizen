@@ -134,9 +134,9 @@ struct userdata {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_select_proper_sink_or_source_slot;
         pa_hook_slot *comm_hook_change_route_slot;
-        pa_hook_slot *comm_hook_update_route_option_slot;
         pa_hook_slot *comm_hook_device_connection_changed_slot;
         pa_hook_slot *comm_hook_device_info_changed_slot;
+        pa_hook_slot *comm_hook_update_info_slot;
     } communicator;
 
     pa_hal_manager *hal_manager;
@@ -1001,31 +1001,20 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
     return PA_HOOK_OK;
 }
 
-/* Forward routing option to HAL */
-static pa_hook_result_t route_option_update_hook_cb(pa_core *c, pa_stream_manager_hook_data_for_option *data, struct userdata *u) {
-    hal_route_option route_option;
-
+/* Update arguments of loopback module */
+static pa_hook_result_t update_info_hook_cb(pa_core *c, pa_stream_manager_hook_data_for_update_info *data, struct userdata *u) {
     pa_assert(c);
     pa_assert(data);
     pa_assert(u);
 
-    pa_log_info("[ROUTE_OPT] route_option_update_hook_cb is called. (%p), stream_role(%s), option[name(%s)/value(%d)]",
-            data, data->stream_role, data->name, data->value);
-    route_option.role = data->stream_role;
-    route_option.name = data->name;
-    route_option.value = data->value;
-
-    if (pa_streq(route_option.role, STREAM_ROLE_LOOPBACK)) {
-        if (pa_streq(route_option.name, MSG_FOR_LOOPBACK_ARG_LATENCY))
-            u->loopback_args.latency_msec = route_option.value;
-        else if (pa_streq(route_option.name, MSG_FOR_LOOPBACK_ARG_ADJUST_TIME))
-            u->loopback_args.adjust_sec = route_option.value;
-        return PA_HOOK_OK;
+    if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
+        pa_log_info("[UPDATE] update_info_hook_cb is called. stream_role(%s) [name(%s)/value(%d)]",
+            data->stream_role, data->name, data->value);
+        if (pa_streq(data->name, MSG_FOR_LOOPBACK_ARG_LATENCY))
+            u->loopback_args.latency_msec = data->value;
+        else if (pa_streq(data->name, MSG_FOR_LOOPBACK_ARG_ADJUST_TIME))
+            u->loopback_args.adjust_sec = data->value;
     }
-
-    /* send information to HAL to update routing option */
-    if (pa_hal_manager_update_route_option(u->hal_manager, &route_option))
-        pa_log_error("[ROUTE_OPT] Failed to pa_hal_manager_update_route_option()");
 
     return PA_HOOK_OK;
 }
@@ -1217,15 +1206,15 @@ int pa__init(pa_module *m)
         u->communicator.comm_hook_change_route_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_CHANGE_ROUTE),
                 PA_HOOK_EARLY, (pa_hook_cb_t)route_change_hook_cb, u);
-        u->communicator.comm_hook_update_route_option_slot = pa_hook_connect(
-                pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION),
-                PA_HOOK_EARLY, (pa_hook_cb_t)route_option_update_hook_cb, u);
         u->communicator.comm_hook_device_connection_changed_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED),
                 PA_HOOK_EARLY, (pa_hook_cb_t)device_connection_changed_hook_cb, u);
         u->communicator.comm_hook_device_info_changed_slot = pa_hook_connect(
                 pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_DEVICE_INFORMATION_CHANGED),
                 PA_HOOK_EARLY, (pa_hook_cb_t)device_info_changed_hook_cb, u);
+        u->communicator.comm_hook_update_info_slot = pa_hook_connect(
+                pa_communicator_hook(u->communicator.comm, PA_COMMUNICATOR_HOOK_UPDATE_INFORMATION),
+                PA_HOOK_EARLY, (pa_hook_cb_t)update_info_hook_cb, u);
     }
     u->device_manager = pa_device_manager_get(u->core);
 
@@ -1279,12 +1268,12 @@ void pa__done(pa_module *m)
             pa_hook_slot_free(u->communicator.comm_hook_select_proper_sink_or_source_slot);
         if (u->communicator.comm_hook_change_route_slot)
             pa_hook_slot_free(u->communicator.comm_hook_change_route_slot);
-        if (u->communicator.comm_hook_update_route_option_slot)
-            pa_hook_slot_free(u->communicator.comm_hook_update_route_option_slot);
         if (u->communicator.comm_hook_device_connection_changed_slot)
             pa_hook_slot_free(u->communicator.comm_hook_device_connection_changed_slot);
         if (u->communicator.comm_hook_device_info_changed_slot)
             pa_hook_slot_free(u->communicator.comm_hook_device_info_changed_slot);
+        if (u->communicator.comm_hook_update_info_slot)
+            pa_hook_slot_free(u->communicator.comm_hook_update_info_slot);
         pa_communicator_unref(u->communicator.comm);
     }
 

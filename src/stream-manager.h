@@ -68,11 +68,11 @@ typedef struct _hook_call_data_for_route {
     bool origins_from_new_data;
 } pa_stream_manager_hook_data_for_route;
 
-typedef struct _hook_call_data_for_option {
+typedef struct _hook_call_data_for_nv_pair_msg {
     const char *stream_role;
     const char *name;
     int32_t value;
-} pa_stream_manager_hook_data_for_option;
+} pa_stream_manager_hook_data_for_nv_pair_msg;
 
 int32_t pa_stream_manager_get_route_type(void *stream, bool origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
 

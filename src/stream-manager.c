@@ -2024,8 +2024,8 @@ static void fill_device_info_to_hook_data(pa_stream_manager *m, void *hook_data,
 static void do_notify(pa_stream_manager *m, notify_command_type_t command, stream_type_t type, bool is_new_data, void *user_data) {
     pa_stream_manager_hook_data_for_select hook_call_select_data;
     pa_stream_manager_hook_data_for_route hook_call_route_data;
-    pa_stream_manager_hook_data_for_option hook_call_option_data;
     hal_stream_connection_info stream_conn_info;
+    hal_route_option route_option;
     const char *role = NULL;
     void *s = NULL;
     const char *modifier_gain = NULL;
@@ -2136,15 +2136,15 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
     }
     case NOTIFY_COMMAND_UPDATE_ROUTE_OPTION: {
         pa_assert(user_data);
-        memset(&hook_call_option_data, 0, sizeof(pa_stream_manager_hook_data_for_option));
+        memset(&route_option, 0, sizeof(hal_route_option));
         s = (type == STREAM_SINK_INPUT) ? (void*)(m->cur_highest_priority.sink_input) :
                                           (void*)(m->cur_highest_priority.source_output);
         if (s) {
-            hook_call_option_data.stream_role = (type == STREAM_SINK_INPUT) ? (m->cur_highest_priority.role_si) :
+            route_option.role = (type == STREAM_SINK_INPUT) ? (m->cur_highest_priority.role_si) :
                                                                               (m->cur_highest_priority.role_so);
-            hook_call_option_data.name = ((stream_route_option*)user_data)->name;
-            hook_call_option_data.value = ((stream_route_option*)user_data)->value;
-            pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION), &hook_call_option_data);
+            route_option.name = ((stream_route_option*)user_data)->name;
+            route_option.value = ((stream_route_option*)user_data)->value;
+            pa_hal_manager_update_route_option(m->hal, &route_option);
         }
         break;
     }
@@ -3228,7 +3228,7 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
 
 static void message_cb(const char *name, int value, void *user_data) {
     pa_stream_manager *m;
-    pa_stream_manager_hook_data_for_option hook_call_option_data;
+    pa_stream_manager_hook_data_for_nv_pair_msg hook_call_data;
 
     pa_assert(user_data);
     pa_assert(name);
@@ -3236,11 +3236,11 @@ static void message_cb(const char *name, int value, void *user_data) {
     m = (pa_stream_manager*)user_data;
 
     if (strstr(name, STREAM_ROLE_LOOPBACK)) {
-        memset(&hook_call_option_data, 0, sizeof(pa_stream_manager_hook_data_for_option));
-        hook_call_option_data.stream_role = STREAM_ROLE_LOOPBACK;
-        hook_call_option_data.name = name;
-        hook_call_option_data.value = value;
-        pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION), &hook_call_option_data);
+        memset(&hook_call_data, 0, sizeof(pa_stream_manager_hook_data_for_nv_pair_msg));
+        hook_call_data.stream_role = STREAM_ROLE_LOOPBACK;
+        hook_call_data.name = name;
+        hook_call_data.value = value;
+        pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_NAME_VALUE_PAIR_MSG), &hook_call_data);
     }
 #ifdef HAVE_DBUS
     else {

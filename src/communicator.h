@@ -5,11 +5,10 @@
 typedef enum pa_communicator_hook {
     PA_COMMUNICATOR_HOOK_SELECT_INIT_SINK_OR_SOURCE,
     PA_COMMUNICATOR_HOOK_CHANGE_ROUTE,
-    PA_COMMUNICATOR_HOOK_UPDATE_ROUTE_OPTION,
     PA_COMMUNICATOR_HOOK_DEVICE_CONNECTION_CHANGED,
     PA_COMMUNICATOR_HOOK_DEVICE_INFORMATION_CHANGED,
-    /* This hook is fired when a event is handled by all subscribers */
-    PA_COMMUNICATOR_HOOK_EVENT_FULLY_HANDLED,
+    PA_COMMUNICATOR_HOOK_EVENT_FULLY_HANDLED, /* This hook is fired when a event is handled by all subscribers */
+    PA_COMMUNICATOR_HOOK_UPDATE_INFORMATION,
     PA_COMMUNICATOR_HOOK_MAX
 } pa_communicator_hook_t;
 

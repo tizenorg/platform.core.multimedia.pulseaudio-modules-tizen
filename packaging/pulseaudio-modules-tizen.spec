@@ -1,6 +1,6 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Pulseaudio modules for Tizen
-Version:          5.0.44
+Version:          5.0.45
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+

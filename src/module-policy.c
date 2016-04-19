@@ -677,7 +677,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                                                                         CONVERT_TO_DEVICE_DIRECTION(data->stream_type),
                                                                                         data->device_role);
                     if (use_internal_codec) {
-                        /* set other device's state to deactivated */
+                        /* set other device's state to be deactivated */
                         PA_IDXSET_FOREACH(_device, conn_devices, conn_idx) {
                             if (device == _device)
                                 continue;
@@ -812,7 +812,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     /* set device state to activated */
                     set_device_state_if_using_internal_codec(latest_device, data->stream_type, DM_DEVICE_STATE_ACTIVATED);
 
-                    /* set other device's state to deactivated */
+                    /* set other device's state to be deactivated */
                     PA_IDXSET_FOREACH(device, conn_devices, conn_idx) {
                         if (latest_device == device)
                             continue;
@@ -846,7 +846,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         }
 
         if (data->route_type == STREAM_ROUTE_TYPE_AUTO_ALL && route_info.num_of_devices) {
-            /* set other device's state to deactivated */
+            /* set other device's state to be deactivated */
             PA_IDXSET_FOREACH(_device, conn_devices, conn_idx) {
                 bool need_to_deactive = true;
                 dm_device_id = pa_device_manager_get_device_id(_device);
@@ -904,9 +904,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                                 route_info.device_infos[route_info.num_of_devices-1].type = dm_device_type;
                                 route_info.device_infos[route_info.num_of_devices-1].direction = CONVERT_TO_HAL_DIRECTION(data->stream_type);
                                 route_info.device_infos[route_info.num_of_devices-1].id = *device_id;
-                                pa_log_info("  ** found a matched device and set state to ACTIVATED: type[%-16s], direction[0x%x], id[%u]",
+                                pa_log_info("  ** found a matched device and set state to be ACTIVATED: type[%-16s], direction[0x%x], id[%u]",
                                             route_info.device_infos[route_info.num_of_devices-1].type, dm_device_direction, *device_id);
-                                /* set device state to activated */
+                                /* set device state to be activated */
                                 set_device_state_if_using_internal_codec(device, data->stream_type, DM_DEVICE_STATE_ACTIVATED);
                             } else
                                 pa_log_debug("  -- it does not use internal audio codec, skip it");

@@ -3466,8 +3466,10 @@ fail:
     deinit_volumes(m);
     deinit_stream_map(m);
     deinit_ipc(m);
-    if (m->hal)
+    if (m->hal) {
+        pa_hal_manager_unset_messsage_callback(m->hal, message_cb);
         pa_hal_manager_unref(m->hal);
+    }
     if (m->dm)
         pa_device_manager_unref(m->dm);
     if (m->subs_ob)
@@ -3533,8 +3535,10 @@ void pa_stream_manager_done(pa_stream_manager *m) {
     if (m->dm)
         pa_device_manager_unref(m->dm);
 
-    if (m->hal)
+    if (m->hal) {
+        pa_hal_manager_unset_messsage_callback(m->hal, message_cb);
         pa_hal_manager_unref(m->hal);
+    }
 
     pa_xfree(m);
 }

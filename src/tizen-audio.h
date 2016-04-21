@@ -75,6 +75,7 @@ typedef void (*message_cb)(const char *name, int value, void *user_data);
 
 /* Overall */
 typedef struct audio_interface {
+    /* Initialization & de-initialization */
     audio_return_t (*init)(void **audio_handle);
     audio_return_t (*deinit)(void *audio_handle);
     /* Volume */
@@ -87,11 +88,12 @@ typedef struct audio_interface {
     /* Routing */
     audio_return_t (*do_route)(void *audio_handle, audio_route_info_t *info);
     audio_return_t (*update_route_option)(void *audio_handle, audio_route_option_t *option);
+    /* Stream */
     audio_return_t (*update_stream_connection_info) (void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
-    /* Buffer Attribute */
+    /* Buffer attribute */
     audio_return_t (*get_buffer_attr)(void *audio_handle, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                       uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
-    /* Interface of PCM device */
+    /* PCM device */
     audio_return_t (*pcm_open)(void *audio_handle, void **pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
     audio_return_t (*pcm_start)(void *audio_handle, void *pcm_handle);
     audio_return_t (*pcm_stop)(void *audio_handle, void *pcm_handle);
@@ -103,8 +105,9 @@ typedef struct audio_interface {
     audio_return_t (*pcm_recover)(void *audio_handle, void *pcm_handle, int revents);
     audio_return_t (*pcm_get_params)(void *audio_handle, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
     audio_return_t (*pcm_set_params)(void *audio_handle, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
-    /* Message callback */
+    /* Message callback (optional) */
     audio_return_t (*set_message_cb)(void *audio_handle, message_cb callback, void *user_data);
+    audio_return_t (*unset_message_cb)(void *audio_handle);
 } audio_interface_t;
 
 audio_return_t audio_init(void **audio_handle);
@@ -132,4 +135,5 @@ audio_return_t audio_pcm_recover(void *audio_handle, void *pcm_handle, int reven
 audio_return_t audio_pcm_get_params(void *audio_handle, void *pcm_handle, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
 audio_return_t audio_pcm_set_params(void *audio_handle, void *pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
 audio_return_t audio_set_message_cb(void *audio_handle, message_cb callback, void *user_data);
+audio_return_t audio_unset_message_cb(void *audio_handle);
 #endif

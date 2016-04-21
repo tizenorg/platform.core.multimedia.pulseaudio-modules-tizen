@@ -964,9 +964,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
     }
 
     if (route_info.device_infos) {
-        /* send information to HAL to set routing */
-        if (pa_hal_manager_do_route(u->hal_manager, &route_info))
-            pa_log_error("[ROUTE] Failed to pa_hal_manager_do_route()");
+        /* send information to HAL to update route */
+        if (pa_hal_manager_update_route(u->hal_manager, &route_info))
+            pa_log_error("[ROUTE] Failed to pa_hal_manager_update_route()");
         pa_xfree(route_info.device_infos);
     }
 

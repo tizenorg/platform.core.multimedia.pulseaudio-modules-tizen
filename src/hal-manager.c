@@ -64,9 +64,9 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core) {
         h->intf.get_volume_value = dlsym(h->dl_handle, "audio_get_volume_value");
         h->intf.get_volume_mute = dlsym(h->dl_handle, "audio_get_volume_mute");
         h->intf.set_volume_mute = dlsym(h->dl_handle, "audio_set_volume_mute");
-        h->intf.do_route = dlsym(h->dl_handle, "audio_do_route");
+        h->intf.update_route = dlsym(h->dl_handle, "audio_update_route");
         h->intf.update_route_option = dlsym(h->dl_handle, "audio_update_route_option");
-        h->intf.update_stream_connection_info  = dlsym(h->dl_handle, "audio_update_stream_connection_info");
+        h->intf.notify_stream_connection_changed = dlsym(h->dl_handle, "audio_notify_stream_connection_changed");
         h->intf.get_buffer_attr = dlsym(h->dl_handle, "audio_get_buffer_attr");
         h->intf.pcm_open = dlsym(h->dl_handle, "audio_pcm_open");
         h->intf.pcm_start = dlsym(h->dl_handle, "audio_pcm_start");
@@ -243,15 +243,15 @@ int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_typ
     return ret;
 }
 
-int32_t pa_hal_manager_do_route(pa_hal_manager *h, hal_route_info *info) {
+int32_t pa_hal_manager_update_route(pa_hal_manager *h, hal_route_info *info) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
     pa_assert(h);
     pa_assert(info);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.do_route(h->ah_handle, (audio_route_info_t*)info)))) {
-        pa_log_error("do_route returns error:0x%x", hal_ret);
+    if (AUDIO_IS_ERROR((hal_ret = h->intf.update_route(h->ah_handle, (audio_route_info_t*)info)))) {
+        pa_log_error("update_route returns error:0x%x", hal_ret);
         ret = -1;
     }
     return ret;
@@ -271,7 +271,7 @@ int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *
     return ret;
 }
 
-int32_t pa_hal_manager_update_stream_connection_info(pa_hal_manager *h, hal_stream_connection_info *info) {
+int32_t pa_hal_manager_notify_stream_connection_changed(pa_hal_manager *h, hal_stream_connection_info *info) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_stream_info_t hal_info;
@@ -283,8 +283,8 @@ int32_t pa_hal_manager_update_stream_connection_info(pa_hal_manager *h, hal_stre
     hal_info.direction = info->direction;
     hal_info.idx = info->idx;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.update_stream_connection_info(h->ah_handle, &hal_info, (uint32_t)info->is_connected)))) {
-        pa_log_error("update_stream_connection_info returns error:0x%x", hal_ret);
+    if (AUDIO_IS_ERROR((hal_ret = h->intf.notify_stream_connection_changed(h->ah_handle, &hal_info, (uint32_t)info->is_connected)))) {
+        pa_log_error("notify_tream_connection_changed returns error:0x%x", hal_ret);
         ret = -1;
     }
     return ret;

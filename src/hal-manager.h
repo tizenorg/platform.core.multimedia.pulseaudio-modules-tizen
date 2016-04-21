@@ -56,9 +56,9 @@ int32_t pa_hal_manager_set_volume_level(pa_hal_manager *h, const char *volume_ty
 int32_t pa_hal_manager_get_volume_value(pa_hal_manager *h, const char *volume_type, const char *gain_type, io_direction_t direction, uint32_t level, double *value);
 int32_t pa_hal_manager_get_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute);
 int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute);
-int32_t pa_hal_manager_do_route(pa_hal_manager *h, hal_route_info *info);
+int32_t pa_hal_manager_update_route(pa_hal_manager *h, hal_route_info *info);
 int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *option);
-int32_t pa_hal_manager_update_stream_connection_info(pa_hal_manager *h, hal_stream_connection_info *info);
+int32_t pa_hal_manager_notify_stream_connection_changed(pa_hal_manager *h, hal_stream_connection_info *info);
 int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, hal_stream_info *info, uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
 int32_t pa_hal_manager_pcm_open(pa_hal_manager *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec, uint32_t period_size, uint32_t periods);
 int32_t pa_hal_manager_pcm_start(pa_hal_manager *h, pcm_handle pcm_h);

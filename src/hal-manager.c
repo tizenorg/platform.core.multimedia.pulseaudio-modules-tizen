@@ -80,6 +80,7 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core) {
         h->intf.pcm_get_params = dlsym(h->dl_handle, "audio_pcm_get_params");
         h->intf.pcm_set_params = dlsym(h->dl_handle, "audio_pcm_set_params");
         h->intf.set_message_cb = dlsym(h->dl_handle, "audio_set_message_cb");
+        h->intf.unset_message_cb = dlsym(h->dl_handle, "audio_unset_message_cb");
         if (h->intf.init) {
             if (h->intf.init(&h->ah_handle) != AUDIO_RET_OK)
                 pa_log_error("hal_manager init failed");
@@ -483,6 +484,24 @@ int32_t pa_hal_manager_set_messsage_callback(pa_hal_manager *h, hal_message_call
         ret = -1;
     } else if (AUDIO_IS_ERROR((hal_ret = h->intf.set_message_cb(h->ah_handle, (message_cb)callback, user_data)))) {
         pa_log_error("set_message_cb returns error:0x%x", hal_ret);
+        ret = -1;
+    }
+
+    return ret;
+}
+
+int32_t pa_hal_manager_unset_messsage_callback(pa_hal_manager *h, hal_message_callback callback) {
+    int32_t ret = 0;
+    audio_return_t hal_ret = AUDIO_RET_OK;
+
+    pa_assert(h);
+    pa_assert(callback);
+
+    if (h->intf.unset_message_cb == NULL) {
+        pa_log_error("there is no unset_message_cb symbol in this audio hal");
+        ret = -1;
+    } else if (AUDIO_IS_ERROR((hal_ret = h->intf.unset_message_cb(h->ah_handle, (message_cb)callback)))) {
+        pa_log_error("unset_message_cb returns error:0x%x", hal_ret);
         ret = -1;
     }
 

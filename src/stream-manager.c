@@ -3418,8 +3418,8 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m->core = c;
 
     m->hal = pa_hal_manager_get(c);
-    if (pa_hal_manager_set_messsage_callback(m->hal, message_cb, m))
-        pa_log_warn("skip setting message callback");
+    if (pa_hal_manager_add_message_callback(m->hal, message_cb, m))
+        pa_log_warn("skip adding message callback");
     m->dm = pa_device_manager_get(c);
     m->subs_ob = pa_subscribe_observer_get(c);
 #ifdef HAVE_DBUS
@@ -3466,8 +3466,10 @@ fail:
     deinit_volumes(m);
     deinit_stream_map(m);
     deinit_ipc(m);
-    if (m->hal)
+    if (m->hal) {
+        pa_hal_manager_remove_message_callback(m->hal, message_cb);
         pa_hal_manager_unref(m->hal);
+    }
     if (m->dm)
         pa_device_manager_unref(m->dm);
     if (m->subs_ob)
@@ -3533,8 +3535,10 @@ void pa_stream_manager_done(pa_stream_manager *m) {
     if (m->dm)
         pa_device_manager_unref(m->dm);
 
-    if (m->hal)
+    if (m->hal) {
+        pa_hal_manager_remove_message_callback(m->hal, message_cb);
         pa_hal_manager_unref(m->hal);
+    }
 
     pa_xfree(m);
 }

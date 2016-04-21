@@ -71,6 +71,7 @@ int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd);
 int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err);
 int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods);
 int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);
-int32_t pa_hal_manager_set_messsage_callback(pa_hal_manager *h, hal_message_callback callback, void *user_data);
+int32_t pa_hal_manager_add_message_callback(pa_hal_manager *h, hal_message_callback callback, void *user_data);
+int32_t pa_hal_manager_remove_message_callback(pa_hal_manager *h, hal_message_callback callback);
 
 #endif

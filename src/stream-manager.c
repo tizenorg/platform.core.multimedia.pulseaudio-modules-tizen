@@ -2158,7 +2158,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
             stream_conn_info.direction = (type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
             stream_conn_info.idx = (type == STREAM_SINK_INPUT) ? ((pa_sink_input*)s)->index : ((pa_source_output*)s)->index;
             stream_conn_info.is_connected = (command == NOTIFY_COMMAND_INFORM_STREAM_CONNECTED) ? true : false;
-            pa_hal_manager_update_stream_connection_info(m->hal, &stream_conn_info);
+            pa_hal_manager_update_stream_connection(m->hal, &stream_conn_info);
         }
         break;
     }

@@ -86,10 +86,10 @@ typedef struct audio_interface {
     audio_return_t (*get_volume_mute)(void *audio_handle, audio_volume_info_t *info, uint32_t *mute);
     audio_return_t (*set_volume_mute)(void *audio_handle, audio_volume_info_t *info, uint32_t mute);
     /* Routing */
-    audio_return_t (*do_route)(void *audio_handle, audio_route_info_t *info);
+    audio_return_t (*update_route)(void *audio_handle, audio_route_info_t *info);
     audio_return_t (*update_route_option)(void *audio_handle, audio_route_option_t *option);
     /* Stream */
-    audio_return_t (*update_stream_connection_info) (void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
+    audio_return_t (*update_stream_connection)(void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
     /* Buffer attribute */
     audio_return_t (*get_buffer_attr)(void *audio_handle, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                       uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
@@ -118,9 +118,9 @@ audio_return_t audio_set_volume_level(void *audio_handle, audio_volume_info_t *i
 audio_return_t audio_get_volume_value(void *audio_handle, audio_volume_info_t *info, uint32_t level, double *value);
 audio_return_t audio_get_volume_mute(void *audio_handle, audio_volume_info_t *info, uint32_t *mute);
 audio_return_t audio_set_volume_mute(void *audio_handle, audio_volume_info_t *info, uint32_t mute);
-audio_return_t audio_do_route(void *audio_handle, audio_route_info_t *info);
+audio_return_t audio_update_route(void *audio_handle, audio_route_info_t *info);
 audio_return_t audio_update_route_option(void *audio_handle, audio_route_option_t *option);
-audio_return_t audio_update_stream_connection_info(void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
+audio_return_t audio_update_stream_connection(void *audio_handle, audio_stream_info_t *info, uint32_t is_connected);
 audio_return_t audio_get_buffer_attr(void *audio_handle, uint32_t direction, const char *latency, uint32_t samplerate, int format, uint32_t channels,
                                      uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize);
 audio_return_t audio_pcm_open(void *audio_handle, void **pcm_handle, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods);

@@ -44,6 +44,7 @@
 #include "stream-manager.h"
 #include "stream-manager-priv.h"
 #include "stream-manager-volume-priv.h"
+#include "stream-manager-restriction-priv.h"
 
 #ifdef HAVE_DBUS
 #define ARR_ARG_MAX  32
@@ -61,6 +62,7 @@
 #define STREAM_MANAGER_METHOD_NAME_GET_VOLUME_MUTE            "GetVolumeMute"
 #define STREAM_MANAGER_METHOD_NAME_GET_CURRENT_VOLUME_TYPE    "GetCurrentVolumeType" /* the type that belongs to the stream of the current max priority */
 #define STREAM_MANAGER_METHOD_NAME_UPDATE_FOCUS_STATUS        "UpdateFocusStatus"
+#define STREAM_MANAGER_METHOD_NAME_UPDATE_RESTRICTION         "UpdateRestriction"
 /* signal */
 #define STREAM_MANAGER_SIGNAL_NAME_VOLUME_CHANGED             "VolumeChanged"
 #define STREAM_MANAGER_SIGNAL_NAME_COMMAND                    "Command"
@@ -79,6 +81,7 @@ static void handle_set_volume_mute(DBusConnection *conn, DBusMessage *msg, void 
 static void handle_get_volume_mute(DBusConnection *conn, DBusMessage *msg, void *userdata);
 static void handle_get_current_volume_type(DBusConnection *conn, DBusMessage *msg, void *userdata);
 static void handle_update_focus_status(DBusConnection *conn, DBusMessage *msg, void *userdata);
+static void handle_update_restriction(DBusConnection *conn, DBusMessage *msg, void *userdata);
 static void send_volume_changed_signal(DBusConnection *conn, const char *direction, const char *volume_type, const uint32_t volume_level);
 static void send_command_signal(DBusConnection *conn, const char *name, int value);
 
@@ -94,6 +97,7 @@ enum method_handler_index {
     METHOD_HANDLER_GET_VOLUME_MUTE,
     METHOD_HANDLER_GET_CURRENT_VOLUME_TYPE,
     METHOD_HANDLER_UPDATE_FOCUS_STATUS,
+    METHOD_HANDLER_UPDATE_RESTRICTION,
     METHOD_HANDLER_MAX
 };
 
@@ -128,11 +132,11 @@ static pa_dbus_arg_info get_volume_max_level_args[]  = { { "io_direction", "s", 
                                                            { "ret_msg", "s", "out" } };
 static pa_dbus_arg_info set_volume_mute_args[]  = { { "io_direction", "s", "in" },
                                                             { "type", "s", "in" },
-                                                          { "on/off", "u", "in" },
+                                                              { "on", "u", "in" },
                                                       { "ret_msg", "s", "out" } };
 static pa_dbus_arg_info get_volume_mute_args[]  = { { "io_direction", "s", "in" },
                                                             { "type", "s", "in" },
-                                                         { "on/off", "u", "out" },
+                                                             { "on", "u", "out" },
                                                       { "ret_msg", "s", "out" } };
 static pa_dbus_arg_info get_current_volume_type_args[]  = { { "io_direction", "s", "in" },
                                                                    { "type", "s", "out" },
@@ -140,7 +144,10 @@ static pa_dbus_arg_info get_current_volume_type_args[]  = { { "io_direction", "s
 static pa_dbus_arg_info update_focus_status_args[]  = { { "parent_id", "u", "in" },
                                                      { "focus_status", "u", "in" },
                                                        { "ret_msg", "s", "out" } };
-static const char* signature_args_for_in[] = { "s", "", "uauau", "usi", "ssu", "ss", "ss", "ssu", "ss", "s", "uu"};
+static pa_dbus_arg_info update_restriction_args[]  = { { "name", "s", "in" },
+                                                      { "value", "u", "in" },
+                                                 { "ret_msg", "s", "out" } };
+static const char* signature_args_for_in[] = { "s", "", "uauau", "usi", "ssu", "ss", "ss", "ssu", "ss", "s", "uu", "su"};
 
 static pa_dbus_method_handler method_handlers[METHOD_HANDLER_MAX] = {
     [METHOD_HANDLER_GET_STREAM_INFO] = {
@@ -198,6 +205,11 @@ static pa_dbus_method_handler method_handlers[METHOD_HANDLER_MAX] = {
         .arguments = update_focus_status_args,
         .n_arguments = sizeof(update_focus_status_args) / sizeof(pa_dbus_arg_info),
         .receive_cb = handle_update_focus_status },
+    [METHOD_HANDLER_UPDATE_RESTRICTION] = {
+        .method_name = STREAM_MANAGER_METHOD_NAME_UPDATE_RESTRICTION,
+        .arguments = update_restriction_args,
+        .n_arguments = sizeof(update_restriction_args) / sizeof(pa_dbus_arg_info),
+        .receive_cb = handle_update_restriction },
 };
 
 const char *dbus_str_none = "none";
@@ -273,13 +285,13 @@ static pa_dbus_interface_info stream_manager_interface_info = {
     "  <method name=\"STREAM_MANAGER_METHOD_NAME_SET_VOLUME_MUTE\">"         \
     "   <arg name=\"io_direction\" direction=\"in\" type=\"s\"/>"            \
     "   <arg name=\"type\" direction=\"in\" type=\"s\"/>"                    \
-    "   <arg name=\"on/off\" direction=\"in\" type=\"u\"/>"                  \
+    "   <arg name=\"on\" direction=\"in\" type=\"u\"/>"                      \
     "   <arg name=\"ret_msg\" direction=\"out\" type=\"s\"/>"                \
     "  </method>"                                                            \
     "  <method name=\"STREAM_MANAGER_METHOD_NAME_GET_VOLUME_MUTE\">"         \
     "   <arg name=\"io_direction\" direction=\"in\" type=\"s\"/>"            \
     "   <arg name=\"type\" direction=\"in\" type=\"s\"/>"                    \
-    "   <arg name=\"on/off\" direction=\"out\" type=\"u\"/>"                 \
+    "   <arg name=\"on\" direction=\"out\" type=\"u\"/>"                     \
     "   <arg name=\"ret_msg\" direction=\"out\" type=\"s\"/>"                \
     "  </method>"                                                            \
     "  <method name=\"STREAM_MANAGER_METHOD_NAME_GET_CURRENT_VOLUME_TYPE\">" \
@@ -290,6 +302,11 @@ static pa_dbus_interface_info stream_manager_interface_info = {
     "  <method name=\"STREAM_MANAGER_METHOD_NAME_UPDATE_FOCUS_STATUS\">"     \
     "   <arg name=\"parent_id\" direction=\"in\" type=\"u\"/>"               \
     "   <arg name=\"focus_status\" direction=\"in\" type=\"u\"/>"            \
+    "   <arg name=\"ret_msg\" direction=\"out\" type=\"s\"/>"                \
+    "  </method>"                                                            \
+    "  <method name=\"STREAM_MANAGER_METHOD_NAME_UPDATE_RESTRICTION\">"      \
+    "   <arg name=\"name\" direction=\"in\" type=\"s\"/>"                    \
+    "   <arg name=\"value\" direction=\"in\" type=\"u\"/>"                   \
     "   <arg name=\"ret_msg\" direction=\"out\" type=\"s\"/>"                \
     "  </method>"                                                            \
     "  <signal name=\"STREAM_MANAGER_SIGNAL_NAME_VOLUME_CHANGED\">"          \
@@ -1139,6 +1156,36 @@ static void handle_update_focus_status(DBusConnection *conn, DBusMessage *msg, v
         pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &stream_manager_dbus_ret_str[RET_MSG_INDEX_ERROR], DBUS_TYPE_INVALID));
         goto FAILURE;
     }
+    pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &stream_manager_dbus_ret_str[RET_MSG_INDEX_OK], DBUS_TYPE_INVALID));
+FAILURE:
+    pa_assert_se(dbus_connection_send(conn, reply, NULL));
+    dbus_message_unref(reply);
+    return;
+}
+
+static void handle_update_restriction(DBusConnection *conn, DBusMessage *msg, void *userdata) {
+    const char *name;
+    uint32_t value = 0;
+    DBusMessage *reply = NULL;
+    pa_stream_manager *m = (pa_stream_manager*)userdata;
+
+    pa_assert(conn);
+    pa_assert(msg);
+    pa_assert(m);
+
+    pa_assert_se(dbus_message_get_args(msg, NULL,
+                                       DBUS_TYPE_STRING, &name,
+                                       DBUS_TYPE_UINT32, &value,
+                                       DBUS_TYPE_INVALID));
+    pa_log_info("handle_update_restriction(), name[%s], value[%u]", name, value);
+
+    pa_assert_se((reply = dbus_message_new_method_return(msg)));
+
+    if (handle_restrictions(m, name, value) < 0) {
+        pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &stream_manager_dbus_ret_str[RET_MSG_INDEX_ERROR], DBUS_TYPE_INVALID));
+        goto FAILURE;
+    }
+
     pa_assert_se(dbus_message_append_args(reply, DBUS_TYPE_STRING, &stream_manager_dbus_ret_str[RET_MSG_INDEX_OK], DBUS_TYPE_INVALID));
 FAILURE:
     pa_assert_se(dbus_connection_send(conn, reply, NULL));
@@ -2634,7 +2681,8 @@ static pa_hook_result_t source_output_new_cb(pa_core *core, pa_source_output_new
     pa_log_info("start source_output_new_new_cb");
 
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_PREPARE, true);
-    /* Update buffer attributes from HAL */
+    if (check_restrictions(m, new_data, STREAM_SOURCE_OUTPUT))
+        return PA_HOOK_CANCEL;
     set_buffer_attribute(m, new_data, STREAM_SOURCE_OUTPUT);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_UPDATE_VOLUME, true);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, true);

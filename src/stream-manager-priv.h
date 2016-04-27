@@ -66,17 +66,24 @@ typedef struct _prior_max_priority_stream {
     const char *role_so;
 } cur_max_priority_stream;
 
+typedef struct _stream_restrictions {
+    bool block_recording_media;
+} stream_restrictions;
+
 struct _stream_manager {
     pa_core *core;
     pa_hal_manager *hal;
     pa_device_manager *dm;
     pa_subscribe_observer *subs_ob;
+
     pa_hashmap *volume_infos;
     pa_hashmap *volume_modifiers;
     pa_hashmap *stream_infos;
     pa_hashmap *stream_parents;
     pa_hashmap *muted_streams;
     cur_max_priority_stream cur_highest_priority;
+    stream_restrictions restrictions;
+
     pa_hook_slot
         *sink_input_new_slot,
         *sink_input_put_slot,
@@ -90,6 +97,7 @@ struct _stream_manager {
         *source_output_state_changed_slot,
         *source_output_move_start_slot,
         *source_output_move_finish_slot;
+
 #ifdef HAVE_DBUS
 #ifdef USE_DBUS_PROTOCOL
     pa_dbus_protocol *dbus_protocol;
@@ -98,6 +106,7 @@ struct _stream_manager {
 #endif
 #endif
     pa_subscription *subscription;
+
     struct {
         pa_communicator *comm;
         pa_hook_slot *comm_hook_device_connection_changed_slot;

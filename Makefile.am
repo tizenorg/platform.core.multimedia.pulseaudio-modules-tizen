@@ -81,6 +81,7 @@ module_policy_la_SOURCES = \
           src/communicator.c   src/communicator.h   \
           src/stream-manager.c   src/stream-manager.h   src/stream-manager-priv.h   \
           src/stream-manager-volume.c   src/stream-manager-volume.h   src/stream-manager-volume-priv.h   \
+          src/stream-manager-restriction.c   src/stream-manager-restriction-priv.h   \
           src/device-manager.c   src/device-manager.h \
           src/subscribe-observer.c   src/subscribe-observer.h
 module_policy_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS) -L$(pulsemodlibexecdir)

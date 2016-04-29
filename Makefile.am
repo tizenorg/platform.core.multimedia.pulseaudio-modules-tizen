@@ -34,7 +34,8 @@ pulsemodlibexec_LTLIBRARIES = \
 		module-tizenaudio-sink.la \
 		module-tizenaudio-source.la \
 		module-tizenaudio-policy.la \
-		module-sound-player.la
+		module-sound-player.la \
+		module-hw-keysound.la
 if ENABLE_HALTC
 pulsemodlibexec_LTLIBRARIES += \
 		module-tizenaudio-haltc.la
@@ -46,7 +47,8 @@ SYMDEF_FILES = \
 		module-tizenaudio-sink-symdef.h \
 		module-tizenaudio-source-symdef.h \
 		module-tizenaudio-policy-symdef.h \
-		module-sound-player-symdef.h
+		module-sound-player-symdef.h \
+		module-hw-keysound-symdef.h
 if ENABLE_HALTC
 SYMDEF_FILES += \
 		module-tizenaudio-haltc-symdef.h
@@ -102,3 +104,8 @@ module_tizenaudio_haltc_la_LDFLAGS = $(PACORE_LDFLAGS) $(PA_LDFLAGS) $(MODULE_LD
 module_tizenaudio_haltc_la_LIBADD = $(PACORE_LIBS) $(PA_LIBS) $(MODULE_LIBADD) libhal-interface.la
 module_tizenaudio_haltc_la_CFLAGS = $(PACORE_CFLAGS) $(PA_CFLAGS) $(AM_CFLAGS)
 endif
+
+module_hw_keysound_la_SOURCES = src/module-hw-keysound.c
+module_hw_keysound_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS)
+module_hw_keysound_la_LIBADD = $(MODULE_LIBADD) $(PACORE_LIBS) $(PA_LIBS) $(AM_LIBADD) $(DBUS_LIBS) $(VCONF_LIBS)
+module_hw_keysound_la_CFLAGS = $(AM_CFLAGS) $(DBUS_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS) $(VCONF_CFLAGS)

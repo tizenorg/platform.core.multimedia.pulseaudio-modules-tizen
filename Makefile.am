@@ -25,16 +25,17 @@ AM_CFLAGS = \
 AM_LIBADD = $(PTHREAD_LIBS) $(INTLLIBS)
 AM_LDFLAGS = $(NODELETE_LDFLAGS)
 
-MODULE_CFLAGS = $(AM_CFLAGS)
-MODULE_LDFLAGS = $(AM_LDFLAGS) -module -disable-static -avoid-version
-MODULE_LIBADD = $(AM_LIBADD) $(LIBLTDL)
+MODULE_CFLAGS = $(AM_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS)
+MODULE_LDFLAGS = $(AM_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS) -module -disable-static -avoid-version
+MODULE_LIBADD = $(AM_LIBADD) $(PACORE_LIBS) $(PA_LIBS)
 
 pulsemodlibexec_LTLIBRARIES = \
 		libhal-interface.la \
 		module-tizenaudio-sink.la \
 		module-tizenaudio-source.la \
 		module-tizenaudio-policy.la \
-		module-sound-player.la
+		module-sound-player.la \
+		module-hw-keysound.la
 if ENABLE_HALTC
 pulsemodlibexec_LTLIBRARIES += \
 		module-tizenaudio-haltc.la
@@ -46,7 +47,8 @@ SYMDEF_FILES = \
 		module-tizenaudio-sink-symdef.h \
 		module-tizenaudio-source-symdef.h \
 		module-tizenaudio-policy-symdef.h \
-		module-sound-player-symdef.h
+		module-sound-player-symdef.h \
+		module-hw-keysound-symdef.h
 if ENABLE_HALTC
 SYMDEF_FILES += \
 		module-tizenaudio-haltc-symdef.h
@@ -70,19 +72,19 @@ libhal_interface_la_LIBADD = $(AM_LIBADD) $(PACORE_LIBS) $(PA_LIBS)
 libhal_interface_la_CFLAGS = $(AM_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS)
 
 module_tizenaudio_sink_la_SOURCES = src/module-tizenaudio-sink.c
-module_tizenaudio_sink_la_LDFLAGS = $(PACORE_LDFLAGS) $(PA_LDFLAGS) $(MODULE_LDFLAGS)
-module_tizenaudio_sink_la_LIBADD = $(PACORE_LIBS) $(PA_LIBS) $(MODULE_LIBADD) libhal-interface.la
-module_tizenaudio_sink_la_CFLAGS = $(PACORE_CFLAGS) $(PA_CFLAGS) $(AM_CFLAGS)
+module_tizenaudio_sink_la_LDFLAGS = $(MODULE_LDFLAGS)
+module_tizenaudio_sink_la_LIBADD = $(MODULE_LIBADD) libhal-interface.la
+module_tizenaudio_sink_la_CFLAGS = $(MODULE_CFLAGS)
 
 module_tizenaudio_source_la_SOURCES = src/module-tizenaudio-source.c
-module_tizenaudio_source_la_LDFLAGS = $(PACORE_LDFLAGS) $(PA_LDFLAGS) $(MODULE_LDFLAGS)
-module_tizenaudio_source_la_LIBADD = $(PACORE_LIBS) $(PA_LIBS) $(MODULE_LIBADD) libhal-interface.la
-module_tizenaudio_source_la_CFLAGS = $(PACORE_CFLAGS) $(PA_CFLAGS) $(AM_CFLAGS)
+module_tizenaudio_source_la_LDFLAGS = $(MODULE_LDFLAGS)
+module_tizenaudio_source_la_LIBADD = $(MODULE_LIBADD) libhal-interface.la
+module_tizenaudio_source_la_CFLAGS = $(MODULE_CFLAGS)
 
 module_sound_player_la_SOURCES = src/module-sound-player.c
-module_sound_player_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS)
-module_sound_player_la_LIBADD = $(MODULE_LIBADD) $(PACORE_LIBS) $(PA_LIBS) $(AM_LIBADD) $(DBUS_LIBS)
-module_sound_player_la_CFLAGS = $(AM_CFLAGS) $(DBUS_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS)
+module_sound_player_la_LDFLAGS = $(MODULE_LDFLAGS)
+module_sound_player_la_LIBADD = $(MODULE_LIBADD) $(DBUS_LIBS)
+module_sound_player_la_CFLAGS = $(MODULE_CFLAGS) $(DBUS_CFLAGS)
 
 module_tizenaudio_policy_la_SOURCES = \
           src/module-tizenaudio-policy.c   \
@@ -92,13 +94,18 @@ module_tizenaudio_policy_la_SOURCES = \
           src/stream-manager-restriction.c   src/stream-manager-restriction-priv.h   \
           src/device-manager.c   src/device-manager.h \
           src/subscribe-observer.c   src/subscribe-observer.h
-module_tizenaudio_policy_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_LDFLAGS) -L$(pulsemodlibexecdir)
-module_tizenaudio_policy_la_LIBADD = $(AM_LIBADD) $(PACORE_LIBS) $(PA_LIBS) $(DBUS_LIBS) $(VCONF_LIBS) $(INIPARSER_LIBS) $(LIBJSON_LIBS) libhal-interface.la
-module_tizenaudio_policy_la_CFLAGS = $(AM_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS) $(DBUS_CFLAGS) $(VCONF_CFLAGS) $(INIPARSER_CFLAGS) $(LIBJSON_CFLAGS)
+module_tizenaudio_policy_la_LDFLAGS = $(MODULE_LDFLAGS) -L$(pulsemodlibexecdir)
+module_tizenaudio_policy_la_LIBADD = $(MODULE_LIBADD) $(DBUS_LIBS) $(VCONF_LIBS) $(INIPARSER_LIBS) $(LIBJSON_LIBS) libhal-interface.la
+module_tizenaudio_policy_la_CFLAGS = $(MODULE_CFLAGS) $(DBUS_CFLAGS) $(VCONF_CFLAGS) $(INIPARSER_CFLAGS) $(LIBJSON_CFLAGS)
 
 if ENABLE_HALTC
 module_tizenaudio_haltc_la_SOURCES = src/module-tizenaudio-haltc.c
-module_tizenaudio_haltc_la_LDFLAGS = $(PACORE_LDFLAGS) $(PA_LDFLAGS) $(MODULE_LDFLAGS)
-module_tizenaudio_haltc_la_LIBADD = $(PACORE_LIBS) $(PA_LIBS) $(MODULE_LIBADD) libhal-interface.la
-module_tizenaudio_haltc_la_CFLAGS = $(PACORE_CFLAGS) $(PA_CFLAGS) $(AM_CFLAGS)
+module_tizenaudio_haltc_la_LDFLAGS = $(MODULE_LDFLAGS)
+module_tizenaudio_haltc_la_LIBADD = $(MODULE_LIBADD) libhal-interface.la
+module_tizenaudio_haltc_la_CFLAGS = $(MODULE_CFLAGS)
 endif
+
+module_hw_keysound_la_SOURCES = src/module-hw-keysound.c
+module_hw_keysound_la_LDFLAGS = $(MODULE_LDFLAGS)
+module_hw_keysound_la_LIBADD = $(MODULE_LIBADD) $(DBUS_LIBS) $(VCONF_LIBS)
+module_hw_keysound_la_CFLAGS = $(MODULE_CFLAGS) $(DBUS_CFLAGS) $(VCONF_CFLAGS)

@@ -23,7 +23,7 @@
 AC_PREREQ(2.63)
 
 AC_INIT([pulseaudio-module-tizen],[0.1])
-AC_CONFIG_SRCDIR([src/module-policy.c])
+AC_CONFIG_SRCDIR([src/module-tizenaudio-policy.c])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign 1.11 -Wall -Wno-portability subdir-objects silent-rules color-tests dist-xz tar-ustar])

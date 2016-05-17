@@ -34,14 +34,14 @@
 #include <pulsecore/play-memblockq.h>
 #include <pulsecore/shared.h>
 
-#include "module-policy-symdef.h"
+#include "module-tizenaudio-policy-symdef.h"
 #include "communicator.h"
 #include "hal-interface.h"
 #include "stream-manager.h"
 #include "device-manager.h"
 
-PA_MODULE_AUTHOR("Seungbae Shin");
-PA_MODULE_DESCRIPTION("Media Policy module");
+PA_MODULE_AUTHOR("Seungbae Shin, Sangchul Lee, Jeonho Mok");
+PA_MODULE_DESCRIPTION("Tizen Audio Policy module");
 PA_MODULE_VERSION(PACKAGE_VERSION);
 PA_MODULE_LOAD_ONCE(true);
 PA_MODULE_USAGE(" ");
@@ -1229,7 +1229,7 @@ int pa__init(pa_module *m)
 
     __load_dump_config(u);
 
-    pa_log_info("policy module is loaded\n");
+    pa_log_info("Tizen Audio Policy module is loaded\n");
 
     if (ma)
         pa_modargs_free(ma);
@@ -1282,5 +1282,5 @@ void pa__done(pa_module *m)
     pa_xfree(u);
 
 
-    pa_log_info("policy module is unloaded\n");
+    pa_log_info("Tizen Audio Policy module is unloaded\n");
 }

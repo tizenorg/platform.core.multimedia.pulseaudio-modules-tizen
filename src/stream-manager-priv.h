@@ -2,7 +2,7 @@
 #define foostreammanagerprivfoo
 
 #include "stream-manager.h"
-#include "hal-manager.h"
+#include "hal-interface.h"
 #include "communicator.h"
 #include "device-manager.h"
 #include "subscribe-observer.h"
@@ -72,7 +72,7 @@ typedef struct _stream_restrictions {
 
 struct _stream_manager {
     pa_core *core;
-    pa_hal_manager *hal;
+    pa_hal_interface *hal;
     pa_device_manager *dm;
     pa_subscribe_observer *subs_ob;
 

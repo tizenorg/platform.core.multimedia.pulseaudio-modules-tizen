@@ -36,7 +36,7 @@
 
 #include "module-policy-symdef.h"
 #include "communicator.h"
-#include "hal-manager.h"
+#include "hal-interface.h"
 #include "stream-manager.h"
 #include "device-manager.h"
 
@@ -139,7 +139,7 @@ struct userdata {
         pa_hook_slot *comm_hook_update_info_slot;
     } communicator;
 
-    pa_hal_manager *hal_manager;
+    pa_hal_interface *hal_interface;
     pa_stream_manager *stream_manager;
     pa_device_manager *device_manager;
 
@@ -965,8 +965,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
 
     if (route_info.device_infos) {
         /* send information to HAL to update route */
-        if (pa_hal_manager_update_route(u->hal_manager, &route_info))
-            pa_log_error("[ROUTE] Failed to pa_hal_manager_update_route()");
+        if (pa_hal_interface_update_route(u->hal_interface, &route_info))
+            pa_log_error("[ROUTE] Failed to pa_hal_interface_update_route()");
         pa_xfree(route_info.device_infos);
     }
 
@@ -1196,7 +1196,7 @@ int pa__init(pa_module *m)
     u->core = m->core;
     u->module = m;
 
-    u->hal_manager = pa_hal_manager_get(u->core);
+    u->hal_interface = pa_hal_interface_get(u->core);
 
     if ((u->communicator.comm = pa_communicator_get(u->core))) {
         u->communicator.comm_hook_select_proper_sink_or_source_slot = pa_hook_connect(
@@ -1276,8 +1276,8 @@ void pa__done(pa_module *m)
         pa_communicator_unref(u->communicator.comm);
     }
 
-    if (u->hal_manager)
-        pa_hal_manager_unref(u->hal_manager);
+    if (u->hal_interface)
+        pa_hal_interface_unref(u->hal_interface);
 
     pa_xfree(u);
 

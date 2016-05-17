@@ -1,7 +1,7 @@
 /***
   This file is part of PulseAudio.
 
-  Copyright 2015 Sangchul Lee <sc11.lee@samsung.com>
+  Copyright 2015-2016 Sangchul Lee <sc11.lee@samsung.com>
 
   PulseAudio is free software; you can redistribute it and/or modify
   it under the terms of the GNU Lesser General Public License as published
@@ -23,16 +23,16 @@
 #include <config.h>
 #endif
 
-#include "hal-manager.h"
+#include "hal-interface.h"
 #include "tizen-audio.h"
 #include <pulsecore/shared.h>
 
-#define SHARED_HAL_MANAGER "tizen-hal-manager"
+#define SHARED_HAL_INTF "tizen-hal-interface"
 
 /* Audio HAL library */
 #define LIB_TIZEN_AUDIO "libtizen-audio.so"
 
-struct _pa_hal_manager {
+struct _pa_hal_interface {
     PA_REFCNT_DECLARE;
 
     pa_core *core;
@@ -41,19 +41,19 @@ struct _pa_hal_manager {
     audio_interface_t intf;
 };
 
-pa_hal_manager* pa_hal_manager_get(pa_core *core) {
-    pa_hal_manager *h;
+pa_hal_interface* pa_hal_interface_get(pa_core *core) {
+    pa_hal_interface *h;
 
     pa_assert(core);
 
-    if ((h = pa_shared_get(core, SHARED_HAL_MANAGER)))
-        return pa_hal_manager_ref(h);
+    if ((h = pa_shared_get(core, SHARED_HAL_INTF)))
+        return pa_hal_interface_ref(h);
 
-    h = pa_xnew0(pa_hal_manager, 1);
+    h = pa_xnew0(pa_hal_interface, 1);
     PA_REFCNT_INIT(h);
     h->core = core;
 
-    /* Load library & init HAL manager */
+    /* Load library & init HAL interface */
     h->dl_handle = dlopen(LIB_TIZEN_AUDIO, RTLD_NOW);
     if (h->dl_handle) {
         h->intf.init = dlsym(h->dl_handle, "audio_init");
@@ -83,20 +83,20 @@ pa_hal_manager* pa_hal_manager_get(pa_core *core) {
         h->intf.remove_message_cb = dlsym(h->dl_handle, "audio_remove_message_cb");
         if (h->intf.init) {
             if (h->intf.init(&h->ah_handle) != AUDIO_RET_OK)
-                pa_log_error("hal_manager init failed");
+                pa_log_error("hal_interface init failed");
         }
 
      } else {
-         pa_log_error("open hal_manager failed :%s", dlerror());
+         pa_log_error("open hal_interface failed :%s", dlerror());
          return NULL;
      }
 
-    pa_shared_set(core, SHARED_HAL_MANAGER, h);
+    pa_shared_set(core, SHARED_HAL_INTF, h);
 
     return h;
 }
 
-pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h) {
+pa_hal_interface* pa_hal_interface_ref(pa_hal_interface *h) {
     pa_assert(h);
     pa_assert(PA_REFCNT_VALUE(h) > 0);
 
@@ -105,7 +105,7 @@ pa_hal_manager* pa_hal_manager_ref(pa_hal_manager *h) {
     return h;
 }
 
-void pa_hal_manager_unref(pa_hal_manager *h) {
+void pa_hal_interface_unref(pa_hal_interface *h) {
     pa_assert(h);
     pa_assert(PA_REFCNT_VALUE(h) > 0);
 
@@ -115,7 +115,7 @@ void pa_hal_manager_unref(pa_hal_manager *h) {
     /* Deinit HAL manager & unload library */
     if (h->intf.deinit) {
         if (h->intf.deinit(h->ah_handle) != AUDIO_RET_OK) {
-            pa_log_error("hal_manager deinit failed");
+            pa_log_error("hal_interface deinit failed");
         }
     }
     if (h->dl_handle) {
@@ -123,12 +123,12 @@ void pa_hal_manager_unref(pa_hal_manager *h) {
     }
 
     if (h->core)
-        pa_shared_remove(h->core, SHARED_HAL_MANAGER);
+        pa_shared_remove(h->core, SHARED_HAL_INTF);
 
     pa_xfree(h);
 }
 
-int32_t pa_hal_manager_get_volume_level_max(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level) {
+int32_t pa_hal_interface_get_volume_level_max(pa_hal_interface *h, const char *volume_type, io_direction_t direction, uint32_t *level) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -147,7 +147,7 @@ int32_t pa_hal_manager_get_volume_level_max(pa_hal_manager *h, const char *volum
     return ret;
 }
 
-int32_t pa_hal_manager_get_volume_level(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *level) {
+int32_t pa_hal_interface_get_volume_level(pa_hal_interface *h, const char *volume_type, io_direction_t direction, uint32_t *level) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -166,7 +166,7 @@ int32_t pa_hal_manager_get_volume_level(pa_hal_manager *h, const char *volume_ty
     return ret;
 }
 
-int32_t pa_hal_manager_set_volume_level(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t level) {
+int32_t pa_hal_interface_set_volume_level(pa_hal_interface *h, const char *volume_type, io_direction_t direction, uint32_t level) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -185,7 +185,7 @@ int32_t pa_hal_manager_set_volume_level(pa_hal_manager *h, const char *volume_ty
     return ret;
 }
 
-int32_t pa_hal_manager_get_volume_value(pa_hal_manager *h, const char *volume_type, const char *gain_type, io_direction_t direction, uint32_t level, double *value) {
+int32_t pa_hal_interface_get_volume_value(pa_hal_interface *h, const char *volume_type, const char *gain_type, io_direction_t direction, uint32_t level, double *value) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -206,7 +206,7 @@ int32_t pa_hal_manager_get_volume_value(pa_hal_manager *h, const char *volume_ty
     return ret;
 }
 
-int32_t pa_hal_manager_get_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t *mute) {
+int32_t pa_hal_interface_get_volume_mute(pa_hal_interface *h, const char *volume_type, io_direction_t direction, uint32_t *mute) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -225,7 +225,7 @@ int32_t pa_hal_manager_get_volume_mute(pa_hal_manager *h, const char *volume_typ
     return ret;
 }
 
-int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_type, io_direction_t direction, uint32_t mute) {
+int32_t pa_hal_interface_set_volume_mute(pa_hal_interface *h, const char *volume_type, io_direction_t direction, uint32_t mute) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_volume_info_t info = {NULL, NULL, 0};
@@ -243,7 +243,7 @@ int32_t pa_hal_manager_set_volume_mute(pa_hal_manager *h, const char *volume_typ
     return ret;
 }
 
-int32_t pa_hal_manager_update_route(pa_hal_manager *h, hal_route_info *info) {
+int32_t pa_hal_interface_update_route(pa_hal_interface *h, hal_route_info *info) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -257,7 +257,7 @@ int32_t pa_hal_manager_update_route(pa_hal_manager *h, hal_route_info *info) {
     return ret;
 }
 
-int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *option) {
+int32_t pa_hal_interface_update_route_option(pa_hal_interface *h, hal_route_option *option) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -271,7 +271,7 @@ int32_t pa_hal_manager_update_route_option(pa_hal_manager *h, hal_route_option *
     return ret;
 }
 
-int32_t pa_hal_manager_notify_stream_connection_changed(pa_hal_manager *h, hal_stream_connection_info *info) {
+int32_t pa_hal_interface_notify_stream_connection_changed(pa_hal_interface *h, hal_stream_connection_info *info) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
     audio_stream_info_t hal_info;
@@ -290,7 +290,7 @@ int32_t pa_hal_manager_notify_stream_connection_changed(pa_hal_manager *h, hal_s
     return ret;
 }
 
-int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, hal_stream_info *info,
+int32_t pa_hal_interface_get_buffer_attribute(pa_hal_interface *h, hal_stream_info *info,
                                             uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
@@ -311,7 +311,7 @@ int32_t pa_hal_manager_get_buffer_attribute(pa_hal_manager *h, hal_stream_info *
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_open(pa_hal_manager *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec, uint32_t period_size, uint32_t periods) {
+int32_t pa_hal_interface_pcm_open(pa_hal_interface *h, pcm_handle *pcm_h, io_direction_t direction, pa_sample_spec *sample_spec, uint32_t period_size, uint32_t periods) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -326,7 +326,7 @@ int32_t pa_hal_manager_pcm_open(pa_hal_manager *h, pcm_handle *pcm_h, io_directi
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_start(pa_hal_manager *h, pcm_handle pcm_h) {
+int32_t pa_hal_interface_pcm_start(pa_hal_interface *h, pcm_handle pcm_h) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -340,7 +340,7 @@ int32_t pa_hal_manager_pcm_start(pa_hal_manager *h, pcm_handle pcm_h) {
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_stop(pa_hal_manager *h, pcm_handle pcm_h) {
+int32_t pa_hal_interface_pcm_stop(pa_hal_interface *h, pcm_handle pcm_h) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -354,7 +354,7 @@ int32_t pa_hal_manager_pcm_stop(pa_hal_manager *h, pcm_handle pcm_h) {
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_close(pa_hal_manager *h, pcm_handle pcm_h) {
+int32_t pa_hal_interface_pcm_close(pa_hal_interface *h, pcm_handle pcm_h) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -368,7 +368,7 @@ int32_t pa_hal_manager_pcm_close(pa_hal_manager *h, pcm_handle pcm_h) {
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_available(pa_hal_manager *h, pcm_handle pcm_h, uint32_t *available) {
+int32_t pa_hal_interface_pcm_available(pa_hal_interface *h, pcm_handle pcm_h, uint32_t *available) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -383,7 +383,7 @@ int32_t pa_hal_manager_pcm_available(pa_hal_manager *h, pcm_handle pcm_h, uint32
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_write(pa_hal_manager *h, pcm_handle pcm_h, const void *buffer, uint32_t frames) {
+int32_t pa_hal_interface_pcm_write(pa_hal_interface *h, pcm_handle pcm_h, const void *buffer, uint32_t frames) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -398,7 +398,7 @@ int32_t pa_hal_manager_pcm_write(pa_hal_manager *h, pcm_handle pcm_h, const void
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_read(pa_hal_manager *h, pcm_handle pcm_h, void *buffer, uint32_t frames) {
+int32_t pa_hal_interface_pcm_read(pa_hal_interface *h, pcm_handle pcm_h, void *buffer, uint32_t frames) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -413,7 +413,7 @@ int32_t pa_hal_manager_pcm_read(pa_hal_manager *h, pcm_handle pcm_h, void *buffe
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd) {
+int32_t pa_hal_interface_pcm_get_fd(pa_hal_interface *h, pcm_handle pcm_h, int *fd) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -428,7 +428,7 @@ int32_t pa_hal_manager_pcm_get_fd(pa_hal_manager *h, pcm_handle pcm_h, int *fd) 
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err) {
+int32_t pa_hal_interface_pcm_recover(pa_hal_interface *h, pcm_handle pcm_h, int err) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -442,7 +442,7 @@ int32_t pa_hal_manager_pcm_recover(pa_hal_manager *h, pcm_handle pcm_h, int err)
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods) {
+int32_t pa_hal_interface_pcm_get_params(pa_hal_interface *h, pcm_handle pcm_h, uint32_t direction, void **sample_spec, uint32_t *period_size, uint32_t *periods) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -458,7 +458,7 @@ int32_t pa_hal_manager_pcm_get_params(pa_hal_manager *h, pcm_handle pcm_h, uint3
     return ret;
 }
 
-int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods) {
+int32_t pa_hal_interface_pcm_set_params(pa_hal_interface *h, pcm_handle pcm_h, uint32_t direction, void *sample_spec, uint32_t period_size, uint32_t periods) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -472,7 +472,7 @@ int32_t pa_hal_manager_pcm_set_params(pa_hal_manager *h, pcm_handle pcm_h, uint3
     return ret;
 }
 
-int32_t pa_hal_manager_add_message_callback(pa_hal_manager *h, hal_message_callback callback, void *user_data) {
+int32_t pa_hal_interface_add_message_callback(pa_hal_interface *h, hal_message_callback callback, void *user_data) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 
@@ -490,7 +490,7 @@ int32_t pa_hal_manager_add_message_callback(pa_hal_manager *h, hal_message_callb
     return ret;
 }
 
-int32_t pa_hal_manager_remove_message_callback(pa_hal_manager *h, hal_message_callback callback) {
+int32_t pa_hal_interface_remove_message_callback(pa_hal_interface *h, hal_message_callback callback) {
     int32_t ret = 0;
     audio_return_t hal_ret = AUDIO_RET_OK;
 

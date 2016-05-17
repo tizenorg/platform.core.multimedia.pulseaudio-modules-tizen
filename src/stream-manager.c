@@ -2191,7 +2191,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
                                                                               (m->cur_highest_priority.role_so);
             route_option.name = ((stream_route_option*)user_data)->name;
             route_option.value = ((stream_route_option*)user_data)->value;
-            pa_hal_manager_update_route_option(m->hal, &route_option);
+            pa_hal_interface_update_route_option(m->hal, &route_option);
         }
         break;
     }
@@ -2205,7 +2205,7 @@ static void do_notify(pa_stream_manager *m, notify_command_type_t command, strea
             stream_conn_info.direction = (type == STREAM_SINK_INPUT) ? DIRECTION_OUT : DIRECTION_IN;
             stream_conn_info.idx = (type == STREAM_SINK_INPUT) ? ((pa_sink_input*)s)->index : ((pa_source_output*)s)->index;
             stream_conn_info.is_connected = (command == NOTIFY_COMMAND_INFORM_STREAM_CONNECTED) ? true : false;
-            pa_hal_manager_notify_stream_connection_changed(m->hal, &stream_conn_info);
+            pa_hal_interface_notify_stream_connection_changed(m->hal, &stream_conn_info);
         }
         break;
     }
@@ -2553,7 +2553,7 @@ static void set_buffer_attribute(pa_stream_manager *m, void *new_data, stream_ty
     info.direction = (io_direction_t)!stream_type;
     info.sample_spec = GET_STREAM_NEW_SAMPLE_SPEC_PTR(new_data, stream_type);
 
-    if (!pa_hal_manager_get_buffer_attribute(m->hal, &info, (uint32_t*)&maxlength, (uint32_t*)&tlength,
+    if (!pa_hal_interface_get_buffer_attribute(m->hal, &info, (uint32_t*)&maxlength, (uint32_t*)&tlength,
                                              (uint32_t*)&prebuf, (uint32_t*)&minreq, (uint32_t*)&fragsize)) {
         pa_log_info(" - maxlength:%d, tlength:%d, prebuf:%d, minreq:%d, fragsize:%d", maxlength, tlength, prebuf, minreq, fragsize);
         pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "maxlength", "%d", maxlength);
@@ -3465,8 +3465,8 @@ pa_stream_manager* pa_stream_manager_init(pa_core *c) {
     m = pa_xnew0(pa_stream_manager, 1);
     m->core = c;
 
-    m->hal = pa_hal_manager_get(c);
-    if (pa_hal_manager_add_message_callback(m->hal, message_cb, m))
+    m->hal = pa_hal_interface_get(c);
+    if (pa_hal_interface_add_message_callback(m->hal, message_cb, m))
         pa_log_warn("skip adding message callback");
     m->dm = pa_device_manager_get(c);
     m->subs_ob = pa_subscribe_observer_get(c);
@@ -3515,8 +3515,8 @@ fail:
     deinit_stream_map(m);
     deinit_ipc(m);
     if (m->hal) {
-        pa_hal_manager_remove_message_callback(m->hal, message_cb);
-        pa_hal_manager_unref(m->hal);
+        pa_hal_interface_remove_message_callback(m->hal, message_cb);
+        pa_hal_interface_unref(m->hal);
     }
     if (m->dm)
         pa_device_manager_unref(m->dm);
@@ -3584,8 +3584,8 @@ void pa_stream_manager_done(pa_stream_manager *m) {
         pa_device_manager_unref(m->dm);
 
     if (m->hal) {
-        pa_hal_manager_remove_message_callback(m->hal, message_cb);
-        pa_hal_manager_unref(m->hal);
+        pa_hal_interface_remove_message_callback(m->hal, message_cb);
+        pa_hal_interface_unref(m->hal);
     }
 
     pa_xfree(m);

@@ -200,7 +200,7 @@ static int get_volume_value(pa_stream_manager *m, stream_type_t stream_type, boo
     /* Get volume value by type & level */
     if (is_hal_volume) {
         /* Get value from HAL */
-        if (pa_hal_manager_get_volume_value(m->hal, volume_type, NULL,
+        if (pa_hal_interface_get_volume_value(m->hal, volume_type, NULL,
                                             CONVERT_TO_HAL_DIRECTION(stream_type), volume_level, &volume_linear)) {
             return -1;
         }
@@ -258,7 +258,7 @@ int32_t set_volume_level_by_type(pa_stream_manager *m, stream_type_t stream_type
      }
 
     if (is_hal_volume)
-        if (pa_hal_manager_set_volume_level(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
+        if (pa_hal_interface_set_volume_level(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
             return -1;
 
     volumes = m->volume_infos;
@@ -369,7 +369,7 @@ int32_t get_volume_level_by_type(pa_stream_manager *m, pa_volume_get_command_t c
         /* Get level */
         if (is_hal_volume) {
             /* from HAL */
-            if (pa_hal_manager_get_volume_level(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
+            if (pa_hal_interface_get_volume_level(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
                 return -1;
         } else {
             /* from stream-manager */
@@ -388,7 +388,7 @@ int32_t get_volume_level_by_type(pa_stream_manager *m, pa_volume_get_command_t c
             /* Get max level */
             if (is_hal_volume) {
                 /* from HAL */
-                if (pa_hal_manager_get_volume_level_max(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
+                if (pa_hal_interface_get_volume_level_max(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
                     return -1;
             } else {
                 /* from stream-manager */
@@ -430,7 +430,7 @@ int32_t set_volume_level_by_idx(pa_stream_manager *m, stream_type_t stream_type,
      }
 
     if (is_hal_volume)
-        if (pa_hal_manager_set_volume_level(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
+        if (pa_hal_interface_set_volume_level(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
             return -1;
 
     /* Get modifier for gain */
@@ -478,7 +478,7 @@ int32_t set_volume_level_with_new_data(pa_stream_manager *m, void *stream, strea
      }
 
     if (is_hal_volume)
-        if (pa_hal_manager_set_volume_level(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
+        if (pa_hal_interface_set_volume_level(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_level))
             return -1;
 
     /* Get modifier for gain */
@@ -523,7 +523,7 @@ int32_t set_volume_mute_by_type(pa_stream_manager *m, stream_type_t stream_type,
      }
 
     if (is_hal_volume)
-        if (pa_hal_manager_set_volume_mute(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), (uint32_t)volume_mute))
+        if (pa_hal_interface_set_volume_mute(m->hal, volume_type, CONVERT_TO_HAL_DIRECTION(stream_type), (uint32_t)volume_mute))
             return -1;
 
     /* Set mute */
@@ -659,7 +659,7 @@ int32_t set_volume_mute_with_new_data(pa_stream_manager *m, void *stream, stream
      }
 
     if (is_hal_volume)
-        if (pa_hal_manager_set_volume_mute(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_mute))
+        if (pa_hal_interface_set_volume_mute(m->hal, volume_type_str, CONVERT_TO_HAL_DIRECTION(stream_type), volume_mute))
             return -1;
 
     if (stream_type == STREAM_SINK_INPUT)

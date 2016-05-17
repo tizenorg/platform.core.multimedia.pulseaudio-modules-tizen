@@ -44,7 +44,7 @@
 #include <pulsecore/rtpoll.h>
 #include <pulsecore/poll.h>
 
-#include "hal-manager.h"
+#include "hal-interface.h"
 #include "module-tizenaudio-sink-symdef.h"
 
 
@@ -94,7 +94,7 @@ struct userdata {
     pa_rtpoll_item *rtpoll_item;
 
     uint64_t write_count;
-    pa_hal_manager *hal_manager;
+    pa_hal_interface *hal_interface;
 };
 
 static const char* const valid_modargs[] = {
@@ -127,7 +127,7 @@ static int build_pollfd(struct userdata *u) {
 
     u->rtpoll_item = pa_rtpoll_item_new(u->rtpoll, PA_RTPOLL_NEVER, 1);
     pollfd = pa_rtpoll_item_get_pollfd(u->rtpoll_item, NULL);
-    ret = pa_hal_manager_pcm_get_fd(u->hal_manager, u->pcm_handle, &fd);
+    ret = pa_hal_interface_pcm_get_fd(u->hal_interface, u->pcm_handle, &fd);
     if (ret < 0 || fd < 0) {
         pa_log_error("Failed to get fd(%d) of PCM device %d", fd, ret);
         return -1;
@@ -144,7 +144,7 @@ static int suspend(struct userdata *u) {
     pa_assert(u);
     pa_assert(u->pcm_handle);
 
-    ret = pa_hal_manager_pcm_close(u->hal_manager, u->pcm_handle);
+    ret = pa_hal_interface_pcm_close(u->hal_interface, u->pcm_handle);
     if (ret) {
         pa_log_error("Error closing PCM device %x", ret);
     }
@@ -169,7 +169,7 @@ static int unsuspend(struct userdata *u) {
 
     pa_log_info("Trying resume...");
     sample_spec = u->sink->sample_spec;
-    ret = pa_hal_manager_pcm_open(u->hal_manager,
+    ret = pa_hal_interface_pcm_open(u->hal_interface,
               (void **)&u->pcm_handle,
               DIRECTION_OUT,
               &sample_spec,
@@ -192,7 +192,7 @@ static int unsuspend(struct userdata *u) {
 
 fail:
     if (u->pcm_handle) {
-        pa_hal_manager_pcm_close(u->hal_manager, u->pcm_handle);
+        pa_hal_interface_pcm_close(u->hal_interface, u->pcm_handle);
         u->pcm_handle = NULL;
     }
     return -PA_ERR_IO;
@@ -327,7 +327,7 @@ static int process_render(struct userdata *u, pa_usec_t now) {
         pa_memchunk chunk;
         frame_size = pa_frame_size(&u->sink->sample_spec);
 
-        pa_hal_manager_pcm_available(u->hal_manager, u->pcm_handle, &avail);
+        pa_hal_interface_pcm_available(u->hal_interface, u->pcm_handle, &avail);
         if ((avail == 0) && !(u->first)) {
             break;
         }
@@ -345,7 +345,7 @@ static int process_render(struct userdata *u, pa_usec_t now) {
         pa_sink_render_full(u->sink, frames_to_write * frame_size, &chunk);
         p = pa_memblock_acquire(chunk.memblock);
 
-        pa_hal_manager_pcm_write(u->hal_manager, u->pcm_handle, (const char*)p + chunk.index, (uint32_t)frames_to_write);
+        pa_hal_interface_pcm_write(u->hal_interface, u->pcm_handle, (const char*)p + chunk.index, (uint32_t)frames_to_write);
 
         pa_memblock_release(chunk.memblock);
         pa_memblock_unref(chunk.memblock);
@@ -398,7 +398,7 @@ static void thread_func(void *userdata) {
             } else {
                 if (u->first) {
                     pa_log_info("Starting playback.");
-                    pa_hal_manager_pcm_start(u->hal_manager, u->pcm_handle);
+                    pa_hal_interface_pcm_start(u->hal_interface, u->pcm_handle);
                     u->first = false;
                 }
                 pa_rtpoll_set_timer_relative(u->rtpoll, (10 * PA_USEC_PER_MSEC));
@@ -421,7 +421,7 @@ static void thread_func(void *userdata) {
                 revents = pollfd->revents;
                 if (revents & ~POLLOUT) {
                     pa_log_debug("Poll error 0x%x occured, try recover.", revents);
-                    pa_hal_manager_pcm_recover(u->hal_manager, u->pcm_handle, revents);
+                    pa_hal_interface_pcm_recover(u->hal_interface, u->pcm_handle, revents);
                     u->first = true;
                     revents = 0;
                 } else {
@@ -474,7 +474,7 @@ int pa__init(pa_module*m) {
     u->core = m->core;
     u->module = m;
     u->first = true;
-    u->hal_manager = pa_hal_manager_get(u->core);
+    u->hal_interface = pa_hal_interface_get(u->core);
     u->rtpoll = pa_rtpoll_new();
     pa_thread_mq_init(&u->thread_mq, m->core->mainloop, u->rtpoll);
 

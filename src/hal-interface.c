@@ -140,7 +140,7 @@ int32_t pa_hal_interface_get_volume_level_max(pa_hal_interface *h, const char *v
     info.type = volume_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.get_volume_level_max(h->ah_handle, &info, level)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.get_volume_level_max(h->ah_handle, &info, level))) {
         pa_log_error("get_volume_level_max returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -159,7 +159,7 @@ int32_t pa_hal_interface_get_volume_level(pa_hal_interface *h, const char *volum
     info.type = volume_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.get_volume_level(h->ah_handle, &info, level)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.get_volume_level(h->ah_handle, &info, level))) {
         pa_log_error("get_volume_level returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -177,7 +177,7 @@ int32_t pa_hal_interface_set_volume_level(pa_hal_interface *h, const char *volum
     info.type = volume_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.set_volume_level(h->ah_handle, &info, level)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.set_volume_level(h->ah_handle, &info, level))) {
         pa_log_error("set_volume_level returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -198,7 +198,7 @@ int32_t pa_hal_interface_get_volume_value(pa_hal_interface *h, const char *volum
     info.gain = gain_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.get_volume_value(h->ah_handle, &info, level, value)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.get_volume_value(h->ah_handle, &info, level, value))) {
         pa_log_error("get_volume_value returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -218,7 +218,7 @@ int32_t pa_hal_interface_get_volume_mute(pa_hal_interface *h, const char *volume
     info.type = volume_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.get_volume_mute(h->ah_handle, &info, mute)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.get_volume_mute(h->ah_handle, &info, mute))) {
         pa_log_error("get_mute returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -236,7 +236,7 @@ int32_t pa_hal_interface_set_volume_mute(pa_hal_interface *h, const char *volume
     info.type = volume_type;
     info.direction = direction;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.set_volume_mute(h->ah_handle, &info, mute)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.set_volume_mute(h->ah_handle, &info, mute))) {
         pa_log_error("set_mute returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -250,7 +250,7 @@ int32_t pa_hal_interface_update_route(pa_hal_interface *h, hal_route_info *info)
     pa_assert(h);
     pa_assert(info);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.update_route(h->ah_handle, (audio_route_info_t*)info)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.update_route(h->ah_handle, (audio_route_info_t*)info))) {
         pa_log_error("update_route returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -264,7 +264,7 @@ int32_t pa_hal_interface_update_route_option(pa_hal_interface *h, hal_route_opti
     pa_assert(h);
     pa_assert(option);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.update_route_option(h->ah_handle, (audio_route_option_t*)option)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.update_route_option(h->ah_handle, (audio_route_option_t*)option))) {
         pa_log_error("update_route_option returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -283,7 +283,7 @@ int32_t pa_hal_interface_notify_stream_connection_changed(pa_hal_interface *h, h
     hal_info.direction = info->direction;
     hal_info.idx = info->idx;
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.notify_stream_connection_changed(h->ah_handle, &hal_info, (uint32_t)info->is_connected)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.notify_stream_connection_changed(h->ah_handle, &hal_info, (uint32_t)info->is_connected))) {
         pa_log_error("notify_tream_connection_changed returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -301,8 +301,8 @@ int32_t pa_hal_interface_get_buffer_attribute(pa_hal_interface *h, hal_stream_in
     pa_log_info("latency:%s, rate:%u, format:%d, channels:%u",
         info->latency, info->sample_spec->rate, info->sample_spec->format, info->sample_spec->channels);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.get_buffer_attr(h->ah_handle, info->direction, info->latency, info->sample_spec->rate, info->sample_spec->format,
-                                                         info->sample_spec->channels, maxlength, tlength, prebuf, minreq, fragsize)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.get_buffer_attr(h->ah_handle, info->direction, info->latency, info->sample_spec->rate, info->sample_spec->format,
+                                                         info->sample_spec->channels, maxlength, tlength, prebuf, minreq, fragsize))) {
         pa_log_error("get_buffer_attr returns error:0x%x", hal_ret);
         ret = -1;
     } else
@@ -319,7 +319,7 @@ int32_t pa_hal_interface_pcm_open(pa_hal_interface *h, pcm_handle *pcm_h, io_dir
     pa_assert(pcm_h);
     pa_assert(sample_spec);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_open(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_open(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods))) {
         pa_log_error("pcm_open returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -333,7 +333,7 @@ int32_t pa_hal_interface_pcm_start(pa_hal_interface *h, pcm_handle pcm_h) {
     pa_assert(h);
     pa_assert(pcm_h);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_start(h->ah_handle, pcm_h)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_start(h->ah_handle, pcm_h))) {
         pa_log_error("pcm_start returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -347,7 +347,7 @@ int32_t pa_hal_interface_pcm_stop(pa_hal_interface *h, pcm_handle pcm_h) {
     pa_assert(h);
     pa_assert(pcm_h);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_stop(h->ah_handle, pcm_h)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_stop(h->ah_handle, pcm_h))) {
         pa_log_error("pcm_stop returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -361,7 +361,7 @@ int32_t pa_hal_interface_pcm_close(pa_hal_interface *h, pcm_handle pcm_h) {
     pa_assert(h);
     pa_assert(pcm_h);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_close(h->ah_handle, pcm_h)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_close(h->ah_handle, pcm_h))) {
         pa_log_error("pcm_close returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -376,7 +376,7 @@ int32_t pa_hal_interface_pcm_available(pa_hal_interface *h, pcm_handle pcm_h, ui
     pa_assert(pcm_h);
     pa_assert(available);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_avail(h->ah_handle, pcm_h, available)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_avail(h->ah_handle, pcm_h, available))) {
         pa_log_error("pcm_avail returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -391,7 +391,7 @@ int32_t pa_hal_interface_pcm_write(pa_hal_interface *h, pcm_handle pcm_h, const 
     pa_assert(pcm_h);
     pa_assert(buffer);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_write(h->ah_handle, pcm_h, buffer, frames)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_write(h->ah_handle, pcm_h, buffer, frames))) {
         pa_log_error("pcm_write returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -406,7 +406,7 @@ int32_t pa_hal_interface_pcm_read(pa_hal_interface *h, pcm_handle pcm_h, void *b
     pa_assert(pcm_h);
     pa_assert(buffer);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_read(h->ah_handle, pcm_h, buffer, frames)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_read(h->ah_handle, pcm_h, buffer, frames))) {
         pa_log_error("pcm_read returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -421,7 +421,7 @@ int32_t pa_hal_interface_pcm_get_fd(pa_hal_interface *h, pcm_handle pcm_h, int *
     pa_assert(pcm_h);
     pa_assert(fd);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_get_fd(h->ah_handle, pcm_h, fd)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_get_fd(h->ah_handle, pcm_h, fd))) {
         pa_log_error("pcm_get_fd returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -435,7 +435,7 @@ int32_t pa_hal_interface_pcm_recover(pa_hal_interface *h, pcm_handle pcm_h, int 
     pa_assert(h);
     pa_assert(pcm_h);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_recover(h->ah_handle, pcm_h, err)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_recover(h->ah_handle, pcm_h, err))) {
         pa_log_error("pcm_recover returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -451,7 +451,7 @@ int32_t pa_hal_interface_pcm_get_params(pa_hal_interface *h, pcm_handle pcm_h, u
     pa_assert(period_size);
     pa_assert(periods);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_get_params(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_get_params(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods))) {
         pa_log_error("pcm_get_params returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -465,7 +465,7 @@ int32_t pa_hal_interface_pcm_set_params(pa_hal_interface *h, pcm_handle pcm_h, u
     pa_assert(h);
     pa_assert(sample_spec);
 
-    if (AUDIO_IS_ERROR((hal_ret = h->intf.pcm_set_params(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods)))) {
+    if (AUDIO_RET_OK != (hal_ret = h->intf.pcm_set_params(h->ah_handle, pcm_h, direction, sample_spec, period_size, periods))) {
         pa_log_error("pcm_set_params returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -482,7 +482,7 @@ int32_t pa_hal_interface_add_message_callback(pa_hal_interface *h, hal_message_c
     if (h->intf.add_message_cb == NULL) {
         pa_log_error("there is no add_message_cb symbol in this audio hal");
         ret = -1;
-    } else if (AUDIO_IS_ERROR((hal_ret = h->intf.add_message_cb(h->ah_handle, (message_cb)callback, user_data)))) {
+    } else if (AUDIO_RET_OK != (hal_ret = h->intf.add_message_cb(h->ah_handle, (message_cb)callback, user_data))) {
         pa_log_error("add_message_cb returns error:0x%x", hal_ret);
         ret = -1;
     }
@@ -500,7 +500,7 @@ int32_t pa_hal_interface_remove_message_callback(pa_hal_interface *h, hal_messag
     if (h->intf.remove_message_cb == NULL) {
         pa_log_error("there is no remove_message_cb symbol in this audio hal");
         ret = -1;
-    } else if (AUDIO_IS_ERROR((hal_ret = h->intf.remove_message_cb(h->ah_handle, (message_cb)callback)))) {
+    } else if (AUDIO_RET_OK != (hal_ret = h->intf.remove_message_cb(h->ah_handle, (message_cb)callback))) {
         pa_log_error("remove_message_cb returns error:0x%x", hal_ret);
         ret = -1;
     }

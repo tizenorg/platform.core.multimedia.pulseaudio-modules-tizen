@@ -1630,14 +1630,14 @@ static bool check_route_type_to_skip(process_command_type_t command, const char 
     return ret;
 }
 
-static bool check_name_is_vstream(pa_stream_manager *m, process_command_type_t command, void *stream, stream_type_t type, bool is_new_data) {
+static bool check_name_is_vstream(process_command_type_t command, void *stream, stream_type_t type, bool is_new_data) {
     bool ret = false;
     const char *name = NULL;
 
-    pa_assert(m);
     pa_assert(stream);
 
-    if (command == PROCESS_COMMAND_PREPARE) {
+    if (command == PROCESS_COMMAND_PREPARE ||
+        command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED ) {
         if (is_new_data)
             name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
         else
@@ -1802,6 +1802,7 @@ static bool update_the_highest_priority_stream(pa_stream_manager *m, process_com
     pa_idxset *streams = NULL;
     pa_sink *sink = NULL;
     pa_source *source = NULL;
+    bool is_vstream = false;
 
     pa_assert(m);
     pa_assert(mine);
@@ -1838,7 +1839,8 @@ static bool update_the_highest_priority_stream(pa_stream_manager *m, process_com
                 sink = ((pa_sink_input_new_data*)mine)->sink;
             else
                 source = ((pa_source_output_new_data*)mine)->source;
-            if ((sink && !(sink->use_internal_codec)) || (source && !(source->use_internal_codec))) {
+            is_vstream = check_name_is_vstream(command, mine, type, is_new_data);
+            if (!is_vstream && ((sink && !(sink->use_internal_codec)) || (source && !(source->use_internal_codec)))) {
                 pa_log_warn("stream(%p) uses external device, skip it", mine);
                 *need_to_update = false;
                 return true;
@@ -2313,7 +2315,7 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
         }
 
         /* check if it is a virtual stream */
-        if (check_name_is_vstream(m, command, stream, type, is_new_data)) {
+        if (check_name_is_vstream(command, stream, type, is_new_data)) {
             pa_log_debug("skip notifying for selecting sink/source, rather set it to null sink/source");
             /* set it to null sink/source */
             if (is_new_data)

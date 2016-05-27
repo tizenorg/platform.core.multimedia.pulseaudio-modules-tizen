@@ -421,6 +421,15 @@ PA_MACHINE_ID_FALLBACK="${localstatedir}/lib/dbus/machine-id"
 AX_DEFINE_DIR(PA_MACHINE_ID_FALLBACK, PA_MACHINE_ID_FALLBACK,
 	      [Fallback machine-id file])
 
+#### ladspa filters for samsung #####
+PKG_CHECK_MODULES(AUDIOFILTERS_SEC_SA, audiofilters-sec-sa)
+AC_SUBST(AUDIOFILTERS_SEC_SA_CFLAGS)
+AC_SUBST(AUDIOFILTERS_SEC_SA_LIBS)
+
+PKG_CHECK_MODULES(AUDIOFILTERS_SEC_SRC, audiofilters-sec-src)
+AC_SUBST(AUDIOFILTERS_SEC_SRC_CFLAGS)
+AC_SUBST(AUDIOFILTERS_SEC_SRC_LIBS)
+
 ###################################
 #            Output               #
 ###################################

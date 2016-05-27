@@ -88,3 +88,25 @@ module_tizenaudio_policy_la_LDFLAGS = $(MODULE_LDFLAGS) $(PACORE_LDFLAGS) $(PA_L
 module_tizenaudio_policy_la_LIBADD = $(AM_LIBADD) $(PACORE_LIBS) $(PA_LIBS) $(DBUS_LIBS) $(VCONF_LIBS) $(INIPARSER_LIBS) $(LIBJSON_LIBS) libhal-interface.la
 module_tizenaudio_policy_la_CFLAGS = $(AM_CFLAGS) $(PACORE_CFLAGS) $(PA_CFLAGS) $(DBUS_CFLAGS) $(VCONF_CFLAGS) $(INIPARSER_CFLAGS) $(LIBJSON_CFLAGS)
 
+#### ladspa filters #####
+ladspafilterlibexecdir = $(libdir)
+
+ladspafilterlibexec_LTLIBRARIES = \
+		amp.la \
+		audiofilters-sec-ladspa.la
+
+amp_la_SOURCES = src/amp.c  src/ladspa.h
+amp_la_LDFLAGS = -module -avoid-version -Xcompiler -nostartfiles
+amp_la_LIBADD =
+amp_la_CFLAGS = -I. -Wall -Werror -O3 -fPIC
+
+audiofilters_sec_ladspa_la_SOURCES = src/audiofilters-sec-ladspa.c  src/ladspa.h
+audiofilters_sec_ladspa_la_LDFLAGS = -module -avoid-version -Xcompiler -nostartfiles $(AUDIOFILTERS_SEC_SA_CFLAGS)
+audiofilters_sec_ladspa_la_LIBADD = $(AUDIOFILTERS_SEC_SA_LIBS) -lstdc++
+audiofilters_sec_ladspa_la_CFLAGS = -I. -Wall -Werror -O3 -fPIC
+
+if USE_DLOG
+audiofilters_sec_ladspa_la_CFLAGS += $(DLOG_CFLAGS) -DUSE_DLOG
+audiofilters_sec_ladspa_la_LIBADD += $(DLOG_LIBS)
+endif
+

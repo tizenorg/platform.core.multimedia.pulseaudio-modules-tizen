@@ -102,3 +102,26 @@ module_tizenaudio_haltc_la_LDFLAGS = $(PACORE_LDFLAGS) $(PA_LDFLAGS) $(MODULE_LD
 module_tizenaudio_haltc_la_LIBADD = $(PACORE_LIBS) $(PA_LIBS) $(MODULE_LIBADD) libhal-interface.la
 module_tizenaudio_haltc_la_CFLAGS = $(PACORE_CFLAGS) $(PA_CFLAGS) $(AM_CFLAGS)
 endif
+
+#### ladspa filters #####
+ladspafilterlibexecdir = $(libdir)
+
+ladspafilterlibexec_LTLIBRARIES = \
+		amp.la \
+		audiofilters-sec-ladspa.la
+
+amp_la_SOURCES = src/amp.c  src/ladspa.h
+amp_la_LDFLAGS = -module -avoid-version -Xcompiler -nostartfiles
+amp_la_LIBADD =
+amp_la_CFLAGS = -I. -Wall -Werror -O3 -fPIC
+
+audiofilters_sec_ladspa_la_SOURCES = src/audiofilters-sec-ladspa.c  src/ladspa.h
+audiofilters_sec_ladspa_la_LDFLAGS = -module -avoid-version -Xcompiler -nostartfiles $(AUDIOFILTERS_SEC_SA_CFLAGS)
+audiofilters_sec_ladspa_la_LIBADD = $(AUDIOFILTERS_SEC_SA_LIBS) -lstdc++
+audiofilters_sec_ladspa_la_CFLAGS = -I. -Wall -Werror -O3 -fPIC
+
+if USE_DLOG
+audiofilters_sec_ladspa_la_CFLAGS += $(DLOG_CFLAGS) -DUSE_DLOG
+audiofilters_sec_ladspa_la_LIBADD += $(DLOG_LIBS)
+endif
+

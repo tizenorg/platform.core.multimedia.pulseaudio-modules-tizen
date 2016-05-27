@@ -19,6 +19,9 @@ BuildRequires:    m4
 %if %{with pulseaudio_dlog}
 BuildRequires:    pkgconfig(dlog)
 %endif
+%ifarch %{arm}
+BuildRequires:    libaudiofilters-sec-devel
+%endif
 Requires(post):   /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
@@ -55,3 +58,5 @@ export LD_AS_NEEDED=0
 %license LICENSE.LGPL-2.1+
 %{_libdir}/pulse-5.0/modules/module-*.so
 %{_libdir}/pulse-5.0/modules/libhal-interface.so
+%{_libdir}/amp.so
+%{_libdir}/audiofilters-sec-ladspa.so

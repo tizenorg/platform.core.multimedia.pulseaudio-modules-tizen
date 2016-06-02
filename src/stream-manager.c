@@ -1630,26 +1630,22 @@ static bool check_route_type_to_skip(process_command_type_t command, const char 
     return ret;
 }
 
-static bool check_name_is_vstream(process_command_type_t command, void *stream, stream_type_t type, bool is_new_data) {
+static bool check_name_is_vstream(void *stream, stream_type_t type, bool is_new_data) {
     bool ret = false;
     const char *name = NULL;
 
     pa_assert(stream);
 
-    if (command == PROCESS_COMMAND_PREPARE ||
-        command == PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED ) {
-        if (is_new_data)
-            name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
-        else
-            name = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
-        if (name) {
-            if (pa_streq(name, VIRTUAL_STREAM_NAME)) {
-                ret = true;
-                pa_log_info("name is [%s]", name);
-            }
+    if (is_new_data)
+        name = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
+    else
+        name = pa_proplist_gets(GET_STREAM_PROPLIST(stream, type), PA_PROP_MEDIA_NAME);
+    if (name) {
+        if (pa_streq(name, VIRTUAL_STREAM_NAME)) {
+            ret = true;
+            pa_log_info("name is [%s]", name);
         }
-    } else
-        pa_log_warn("not supported command(%d)", command);
+    }
 
     return ret;
 }
@@ -1839,7 +1835,7 @@ static bool update_the_highest_priority_stream(pa_stream_manager *m, process_com
                 sink = ((pa_sink_input_new_data*)mine)->sink;
             else
                 source = ((pa_source_output_new_data*)mine)->source;
-            is_vstream = check_name_is_vstream(command, mine, type, is_new_data);
+            is_vstream = check_name_is_vstream(mine, type, is_new_data);
             if (!is_vstream && ((sink && !(sink->use_internal_codec)) || (source && !(source->use_internal_codec)))) {
                 pa_log_warn("stream(%p) uses external device, skip it", mine);
                 *need_to_update = false;
@@ -1914,7 +1910,10 @@ static bool update_the_highest_priority_stream(pa_stream_manager *m, process_com
                     pa_log_warn("stream(%p) has the route type for external device, skip it", i);
                     continue;
                 } else {
-                    if (type == STREAM_SINK_INPUT ? !(((pa_sink_input*)i)->sink->use_internal_codec) : !(((pa_source_output*)i)->source->use_internal_codec)) {
+                    is_vstream = check_name_is_vstream(i, type, false);
+                    if (!is_vstream &&
+                       (type == STREAM_SINK_INPUT ? !(((pa_sink_input*)i)->sink->use_internal_codec) :
+                                                    !(((pa_source_output*)i)->source->use_internal_codec))) {
                         pa_log_warn("stream(%p) uses external audio codec, skip it", i);
                         continue;
                     }
@@ -2315,7 +2314,7 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
         }
 
         /* check if it is a virtual stream */
-        if (check_name_is_vstream(command, stream, type, is_new_data)) {
+        if (check_name_is_vstream(stream, type, is_new_data)) {
             pa_log_debug("skip notifying for selecting sink/source, rather set it to null sink/source");
             /* set it to null sink/source */
             if (is_new_data)
@@ -2390,6 +2389,7 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
                 }
             }
         }
+
         if (!is_new_data)
             do_notify(m, NOTIFY_COMMAND_INFORM_STREAM_CONNECTED, type, false, stream);
 

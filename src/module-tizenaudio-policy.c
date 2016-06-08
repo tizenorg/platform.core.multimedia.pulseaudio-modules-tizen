@@ -922,10 +922,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         }
     }
 
-    /* move other streams that are belong to device of NORMAL role
-     * to a proper sink/source if needed */
-    if (device && data->stream && data->origins_from_new_data &&
-        data->route_type == STREAM_ROUTE_TYPE_MANUAL) {
+    /* move stream(s) to a proper sink/source if needed */
+    if (device && data->stream && data->origins_from_new_data) {
+        /* CALL-VOICE */
         if (pa_streq(data->stream_role, STREAM_ROLE_CALL_VOICE)) {
             if (data->stream_type == STREAM_SINK_INPUT) {
                 if (!(sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL)) ||
@@ -942,6 +941,7 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                 else
                     streams = source->outputs;
             }
+            /* move other streams that belong to the device of NORMAL role */
             if (streams) {
                 PA_IDXSET_FOREACH(s, streams, idx) {
                     if (data->stream_type == STREAM_SINK_INPUT) {
@@ -959,6 +959,17 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                     pa_sink_suspend(sink, true, PA_SUSPEND_INTERNAL);
                 else if(data->stream_type == STREAM_SOURCE_OUTPUT)
                     pa_source_suspend(source, true, PA_SUSPEND_INTERNAL);
+            }
+        }
+        /* RADIO */
+        else if (pa_streq(data->stream_role, STREAM_ROLE_RADIO)) {
+            if (data->stream_type == STREAM_SINK_INPUT &&
+                pa_stream_manager_check_name_is_vstream(data->stream, STREAM_SINK_INPUT, true)) {
+                if ((sink = pa_device_manager_get_sink(device, data->device_role))) {
+                    *(data->proper_sink) = sink;
+                    pa_log_debug("[ROUTE][RADIO] *** now, sink-input(%p,%u) uses the sink(%p,%s)",
+                                 data->stream, ((pa_sink_input*)data->stream)->index, sink, sink->name);
+                }
             }
         }
     }
@@ -983,6 +994,8 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
         if (data->idx_streams) {
             PA_IDXSET_FOREACH(s, data->idx_streams, idx) {
                 if (sink && sink != ((pa_sink_input*)s)->sink) {
+                    if ((pa_stream_manager_check_name_is_vstream(s, STREAM_SINK_INPUT, false)))
+                        continue;
                     if (((combine_sink = (pa_sink*)pa_namereg_get(u->core, SINK_NAME_COMBINED, PA_NAMEREG_SINK)) &&
                         ((pa_sink_input*)s)->sink == combine_sink))
                         break;

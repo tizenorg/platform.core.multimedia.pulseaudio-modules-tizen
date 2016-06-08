@@ -18,6 +18,7 @@
 #define STREAM_ROLE_CALL_VIDEO        "call-video"
 #define STREAM_ROLE_VOIP              "voip"
 #define STREAM_ROLE_LOOPBACK          "loopback"
+#define STREAM_ROLE_RADIO             "radio"
 
 #define SINK_NAME_COMBINED            "sink_combined"
 #define SINK_NAME_NULL                "sink_null"
@@ -74,7 +75,8 @@ typedef struct _hook_call_data_for_update_info {
     int32_t value;
 } pa_stream_manager_hook_data_for_update_info;
 
-int32_t pa_stream_manager_get_route_type(void *stream, bool origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type);
+int32_t pa_stream_manager_get_route_type(void *stream, stream_type_t stream_type, bool is_new_data, stream_route_type_t *stream_route_type);
+bool pa_stream_manager_check_name_is_vstream(void *stream, stream_type_t type, bool is_new_data);
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c);
 void pa_stream_manager_done(pa_stream_manager* m);

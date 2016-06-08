@@ -474,7 +474,7 @@ typedef struct _stream_route_option {
 static void do_notify(pa_stream_manager *m, notify_command_type_t command, stream_type_t type, bool is_new_data, void *user_data);
 static process_stream_result_t process_stream(pa_stream_manager *m, void *stream, stream_type_t type, process_command_type_t command, bool is_new_data);
 
-static int get_available_streams(pa_stream_manager *m, stream_list *list) {
+static int32_t get_available_streams(pa_stream_manager *m, stream_list *list) {
     void *state = NULL;
     stream_info *s = NULL;
     char *role = NULL;
@@ -501,7 +501,7 @@ static int get_available_streams(pa_stream_manager *m, stream_list *list) {
     return 0;
 }
 
-static int get_stream_info(pa_stream_manager *m, const char *stream_role, stream_info_per_type *info) {
+static int32_t get_stream_info(pa_stream_manager *m, const char *stream_role, stream_info_per_type *info) {
     uint32_t idx = 0;
     char *name;
     int i = 0;
@@ -1286,7 +1286,7 @@ static void send_command_signal(DBusConnection *conn, const char *name, int valu
 }
 #endif
 
-static int convert_route_type(stream_route_type_t *route_type, const char *route_type_string) {
+static int32_t convert_route_type(stream_route_type_t *route_type, const char *route_type_string) {
     int ret = 0;
 
     pa_assert(route_type);
@@ -1308,6 +1308,29 @@ static int convert_route_type(stream_route_type_t *route_type, const char *route
     }
 
     return ret;
+}
+
+static int32_t get_route_type(void *stream, stream_type_t stream_type, bool is_new_data, stream_route_type_t *stream_route_type) {
+    const char *route_type_str = NULL;
+
+    pa_assert(stream);
+    pa_assert(stream_route_type);
+
+    if (is_new_data)
+        route_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, stream_type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
+    else
+        route_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(stream, stream_type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
+    if (!route_type_str) {
+        pa_log_warn("could not get route type from the stream(%p)", stream);
+        return -1;
+     }
+
+    if (pa_atoi(route_type_str, (int32_t*)stream_route_type)) {
+        pa_log_error("could not convert route_type_str(%s) to int", route_type_str);
+        return -1;
+    }
+
+    return 0;
 }
 
 static void dump_stream_map(pa_stream_manager *m) {
@@ -2895,7 +2918,7 @@ static void process_stream_as_device_change_for_auto_route(pa_stream_manager *m,
     pa_log_info("[SM][PROCESS_STREAM_FOR_AUTO] stream(%p), stream_type(%d), is_connected(%d), use_internal_codec(%d)",
         stream, stream_type, is_connected, use_internal_codec);
 
-    if (pa_stream_manager_get_route_type(stream, false, stream_type, &route_type) ||
+    if (get_route_type(stream, stream_type, false, &route_type) ||
         (route_type != STREAM_ROUTE_TYPE_AUTO && route_type != STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))
         return;
 
@@ -2979,7 +3002,7 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
             source = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
 
         PA_IDXSET_FOREACH(s, streams, s_idx) { /* streams: core->source_outputs/core->sink_inputs */
-            if (!pa_stream_manager_get_route_type(s, false, stream_type, &route_type) && (route_type == stream_route_type)) {
+            if (!get_route_type(s, stream_type, false, &route_type) && (route_type == stream_route_type)) {
                 role = pa_proplist_gets(GET_STREAM_PROPLIST(s, stream_type), PA_PROP_MEDIA_ROLE);
                 pa_log_debug("  -- idx(%u), route_type(%d), role(%s)", s_idx, route_type, role);
                 if (is_connected) {
@@ -3104,7 +3127,7 @@ static void update_sink_or_source_as_device_change(stream_route_type_t stream_ro
         pa_log_info("[SM][UPDATE_SINK_SOURCE][EXT] deivce_type(%s), is_connected(%d))", device_type, is_connected);
         if (!is_connected) {
             PA_IDXSET_FOREACH(s, streams, s_idx) { /* streams: source->outputs/sink->inputs */
-                if (!pa_stream_manager_get_route_type(s, false, stream_type, &route_type) && route_type == stream_route_type) {
+                if (!get_route_type(s, stream_type, false, &route_type) && route_type == stream_route_type) {
                     if (stream_type == STREAM_SOURCE_OUTPUT) {
                         /* move it to null source if this role is for external device */
                         pa_source_output_move_to((pa_source_output*)s, null_source, false);
@@ -3239,11 +3262,11 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
 
     /* If the route type of the stream is not manual, notify again */
     if (m->cur_highest_priority.source_output && (device_direction & DM_DEVICE_DIRECTION_IN)) {
-        if (!pa_stream_manager_get_route_type(m->cur_highest_priority.source_output, false, STREAM_SOURCE_OUTPUT, &route_type)) {
+        if (!get_route_type(m->cur_highest_priority.source_output, STREAM_SOURCE_OUTPUT, false, &route_type)) {
             if (route_type < STREAM_ROUTE_TYPE_MANUAL) {
                 if (use_internal_codec) {
                     PA_IDXSET_FOREACH(s, m->cur_highest_priority.source_output->source->outputs, s_idx) {
-                        if (!data->is_connected && !pa_stream_manager_get_route_type(s, false, STREAM_SOURCE_OUTPUT, &route_type) &&
+                        if (!data->is_connected && !get_route_type(s, STREAM_SOURCE_OUTPUT, false, &route_type) &&
                             ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SOURCE_OUTPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
@@ -3263,11 +3286,11 @@ static pa_hook_result_t device_connection_changed_hook_cb(pa_core *c, pa_device_
         }
     }
     if (m->cur_highest_priority.sink_input && (device_direction & DM_DEVICE_DIRECTION_OUT)) {
-        if (!pa_stream_manager_get_route_type(m->cur_highest_priority.sink_input, false, STREAM_SINK_INPUT, &route_type)) {
+        if (!get_route_type(m->cur_highest_priority.sink_input, STREAM_SINK_INPUT, false, &route_type)) {
             if (route_type < STREAM_ROUTE_TYPE_MANUAL) {
                 if (use_internal_codec) {
                     PA_IDXSET_FOREACH(s, m->cur_highest_priority.sink_input->sink->inputs, s_idx) {
-                        if (!data->is_connected && !pa_stream_manager_get_route_type(s, false, STREAM_SINK_INPUT, &route_type) &&
+                        if (!data->is_connected && !get_route_type(s, STREAM_SINK_INPUT, false, &route_type) &&
                             ((route_type == STREAM_ROUTE_TYPE_AUTO) || (route_type == STREAM_ROUTE_TYPE_AUTO_LAST_CONNECTED))) {
                             /* remove activated device info. if it has the AUTO route type */
                             active_dev = pa_proplist_gets(GET_STREAM_PROPLIST(s, STREAM_SINK_INPUT), PA_PROP_MEDIA_ROUTE_AUTO_ACTIVE_DEV);
@@ -3347,6 +3370,7 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
     }
 }
 
+/* Message callback from HAL interface */
 static void message_cb(const char *name, int value, void *user_data) {
     pa_stream_manager *m;
     pa_stream_manager_hook_data_for_update_info hook_call_data;
@@ -3356,6 +3380,7 @@ static void message_cb(const char *name, int value, void *user_data) {
 
     m = (pa_stream_manager*)user_data;
 
+    /* For module-loopback parameters */
     if (strstr(name, STREAM_ROLE_LOOPBACK)) {
         memset(&hook_call_data, 0, sizeof(pa_stream_manager_hook_data_for_update_info));
         hook_call_data.stream_role = STREAM_ROLE_LOOPBACK;
@@ -3364,6 +3389,7 @@ static void message_cb(const char *name, int value, void *user_data) {
         pa_hook_fire(pa_communicator_hook(m->comm.comm, PA_COMMUNICATOR_HOOK_UPDATE_INFORMATION), &hook_call_data);
     }
 #ifdef HAVE_DBUS
+    /* Others */
     else {
         send_command_signal(pa_dbus_connection_get(m->dbus_conn), name, value);
     }
@@ -3372,7 +3398,7 @@ static void message_cb(const char *name, int value, void *user_data) {
     return;
 }
 
-static int init_ipc(pa_stream_manager *m) {
+static int32_t init_ipc(pa_stream_manager *m) {
     DBusError err;
     pa_dbus_connection *conn = NULL;
     static const DBusObjectPathVTable vtable = {
@@ -3436,27 +3462,12 @@ static void deinit_ipc(pa_stream_manager *m) {
     return;
 }
 
-int32_t pa_stream_manager_get_route_type(void *stream, bool origins_from_new_data, stream_type_t stream_type, stream_route_type_t *stream_route_type) {
-    const char *route_type_str = NULL;
+bool pa_stream_manager_check_name_is_vstream(void *stream, stream_type_t type, bool is_new_data) {
+    return check_name_is_vstream(stream, type, is_new_data);
+}
 
-    pa_assert(stream);
-    pa_assert(stream_route_type);
-
-    if (origins_from_new_data)
-        route_type_str = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(stream, stream_type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
-    else
-        route_type_str = pa_proplist_gets(GET_STREAM_PROPLIST(stream, stream_type), PA_PROP_MEDIA_ROLE_ROUTE_TYPE);
-    if (!route_type_str) {
-        pa_log_warn("could not get route type from the stream(%p)", stream);
-        return -1;
-     }
-
-    if (pa_atoi(route_type_str, (int32_t*)stream_route_type)) {
-        pa_log_error("could not convert route_type_str(%s) to int", route_type_str);
-        return -1;
-    }
-
-    return 0;
+int32_t pa_stream_manager_get_route_type(void *stream, stream_type_t stream_type, bool is_new_data, stream_route_type_t *stream_route_type) {
+    return get_route_type(stream, stream_type, is_new_data, stream_route_type);
 }
 
 pa_stream_manager* pa_stream_manager_init(pa_core *c) {

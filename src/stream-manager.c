@@ -3432,17 +3432,16 @@ static void subscribe_cb(pa_core *core, pa_subscription_event_type_t t, uint32_t
 
     pa_log_info("subscribe_cb() is called, t(%x), idx(%u)", t, idx);
 
-    if ((client = pa_idxset_get_by_index(core->clients, idx)) == NULL) {
-        pa_log_error(" - could not find any client that has idx(%u)", idx);
-        return;
-    }
-    name = pa_proplist_gets(client->proplist, PA_PROP_APPLICATION_NAME);
-    if (!name || (name && !pa_streq(name, STREAM_MANAGER_CLIENT_NAME))) {
-        pa_log_warn(" - this is not a client(%s) that we should take care of, skip it", name);
-        return;
-    }
-
     if (t == (PA_SUBSCRIPTION_EVENT_CLIENT|PA_SUBSCRIPTION_EVENT_CHANGE)) {
+        if ((client = pa_idxset_get_by_index(core->clients, idx)) == NULL) {
+            pa_log_error(" - could not find any client that has idx(%u)", idx);
+            return;
+        }
+        name = pa_proplist_gets(client->proplist, PA_PROP_APPLICATION_NAME);
+        if (!name || (name && !pa_streq(name, STREAM_MANAGER_CLIENT_NAME))) {
+            pa_log_warn(" - this is not a client(%s) that we should take care of, skip it", name);
+            return;
+        }
         /* add a stream parent */
         sp = pa_xmalloc0(sizeof(stream_parent));
         sp->idx_sink_inputs = pa_idxset_new(pa_idxset_trivial_hash_func, pa_idxset_trivial_compare_func);

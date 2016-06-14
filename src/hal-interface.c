@@ -67,7 +67,6 @@ pa_hal_interface* pa_hal_interface_get(pa_core *core) {
         h->intf.update_route = dlsym(h->dl_handle, "audio_update_route");
         h->intf.update_route_option = dlsym(h->dl_handle, "audio_update_route_option");
         h->intf.notify_stream_connection_changed = dlsym(h->dl_handle, "audio_notify_stream_connection_changed");
-        h->intf.get_buffer_attr = dlsym(h->dl_handle, "audio_get_buffer_attr");
         h->intf.pcm_open = dlsym(h->dl_handle, "audio_pcm_open");
         h->intf.pcm_start = dlsym(h->dl_handle, "audio_pcm_start");
         h->intf.pcm_stop = dlsym(h->dl_handle, "audio_pcm_stop");
@@ -287,27 +286,6 @@ int32_t pa_hal_interface_notify_stream_connection_changed(pa_hal_interface *h, h
         pa_log_error("notify_tream_connection_changed returns error:0x%x", hal_ret);
         ret = -1;
     }
-    return ret;
-}
-
-int32_t pa_hal_interface_get_buffer_attribute(pa_hal_interface *h, hal_stream_info *info,
-                                            uint32_t *maxlength, uint32_t *tlength, uint32_t *prebuf, uint32_t* minreq, uint32_t *fragsize) {
-    int32_t ret = 0;
-    audio_return_t hal_ret = AUDIO_RET_OK;
-
-    pa_assert(h);
-    pa_assert(info);
-
-    pa_log_info("latency:%s, rate:%u, format:%d, channels:%u",
-        info->latency, info->sample_spec->rate, info->sample_spec->format, info->sample_spec->channels);
-
-    if (AUDIO_RET_OK != (hal_ret = h->intf.get_buffer_attr(h->ah_handle, info->direction, info->latency, info->sample_spec->rate, info->sample_spec->format,
-                                                         info->sample_spec->channels, maxlength, tlength, prebuf, minreq, fragsize))) {
-        pa_log_error("get_buffer_attr returns error:0x%x", hal_ret);
-        ret = -1;
-    } else
-        pa_log_info("maxlength:%d, tlength:%d, prebuf:%d, minreq:%d, fragsize:%d", *maxlength, *tlength, *prebuf, *minreq, *fragsize);
-
     return ret;
 }
 

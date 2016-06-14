@@ -39,15 +39,6 @@ typedef enum _stream_direction {
 #define IS_FOCUS_ACQUIRED(focus, type) \
       (type == STREAM_SINK_INPUT ? (focus & STREAM_FOCUS_ACQUIRED_PLAYBACK) : (focus & STREAM_FOCUS_ACQUIRED_CAPTURE))
 
-typedef struct _stream_info {
-    int32_t priority;
-    stream_route_type_t route_type;
-    const char *volume_types[STREAM_DIRECTION_MAX];
-    pa_idxset *idx_avail_in_devices;
-    pa_idxset *idx_avail_out_devices;
-    pa_idxset *idx_avail_frameworks;
-} stream_info;
-
 typedef struct _volume_info {
     bool is_hal_volume_type;
     struct _values {
@@ -56,6 +47,23 @@ typedef struct _volume_info {
         pa_idxset *idx_volume_values;
     } values[STREAM_DIRECTION_MAX];
 } volume_info;
+
+typedef struct _latency_info {
+    int32_t periodt_ms;
+    int32_t tlength_ms;
+    int32_t minreq_ms;
+    int32_t prebuf_ms;
+    int32_t maxlength;
+} latency_info;
+
+typedef struct _stream_info {
+    int32_t priority;
+    stream_route_type_t route_type;
+    const char *volume_types[STREAM_DIRECTION_MAX];
+    pa_idxset *idx_avail_in_devices;
+    pa_idxset *idx_avail_out_devices;
+    pa_idxset *idx_avail_frameworks;
+} stream_info;
 
 typedef struct _prior_max_priority_stream {
     pa_sink_input *sink_input;
@@ -79,6 +87,7 @@ struct _stream_manager {
     pa_hashmap *volume_infos;
     pa_hashmap *volume_modifiers;
     pa_hashmap *stream_infos;
+    pa_hashmap *latency_infos;
     pa_hashmap *stream_parents;
     pa_hashmap *muted_streams;
     cur_max_priority_stream cur_highest_priority;

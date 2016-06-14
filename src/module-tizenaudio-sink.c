@@ -486,6 +486,7 @@ int pa__init(pa_module*m) {
         pa_log_error("fragment_size or fragments are invalid.");
         goto fail;
     }
+    pa_log_info("fragment_size(%u), fragments(%u)", u->frag_size, u->nfrags);
 
     pa_sink_new_data_init(&data);
     data.driver = __FILE__;

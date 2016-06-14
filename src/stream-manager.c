@@ -358,6 +358,7 @@ typedef enum _process_command_type {
     PROCESS_COMMAND_UPDATE_VOLUME,
     PROCESS_COMMAND_ADD_PARENT_ID,
     PROCESS_COMMAND_REMOVE_PARENT_ID,
+    PROCESS_COMMAND_UPDATE_BUFFER_ATTR,
 } process_command_type_t;
 
 typedef enum _notify_command_type {
@@ -377,6 +378,7 @@ const char* process_command_type_str[] = {
     "UPDATE_VOLUME",
     "ADD_PARENT_ID",
     "REMOVE_PARENT_ID",
+    "UPDATE_BUFFER_ATTR",
 };
 
 const char* notify_command_type_str[] = {
@@ -392,6 +394,13 @@ const char* notify_command_type_str[] = {
 #define STREAM_MAP_VOLUMES "volumes"
 #define STREAM_MAP_VOLUME_TYPE "type"
 #define STREAM_MAP_VOLUME_IS_FOR_HAL "is-hal-volume"
+#define STREAM_MAP_LATENCIES "latencies"
+#define STREAM_MAP_LATENCY_TYPE "type"
+#define STREAM_MAP_LATENCY_PERIOD_TIME_MS "periodt-ms"
+#define STREAM_MAP_LATENCY_TLENGTH_MS "tlength-ms"
+#define STREAM_MAP_LATENCY_MINREQ_MS "minreq-ms"
+#define STREAM_MAP_LATENCY_PREBUF_MS "prebuf-ms"
+#define STREAM_MAP_LATENCY_MAXLENGTH "maxlength"
 #define STREAM_MAP_STREAMS "streams"
 #define STREAM_MAP_STREAM_ROLE "role"
 #define STREAM_MAP_STREAM_PRIORITY "priority"
@@ -1363,33 +1372,20 @@ static void dump_stream_map(pa_stream_manager *m) {
 static int init_stream_map(pa_stream_manager *m) {
     volume_info *v;
     stream_info *s;
+    latency_info *l;
     json_object *o;
-    json_object *volume_array_o;
-    json_object *stream_array_o;
-    json_object *volume_type_o;
-    json_object *is_hal_volume_o;
-    json_object *role_o;
-    json_object *priority_o;
-    json_object *route_type_o;
-    json_object *volume_types_o;
-    json_object *avail_in_devices_o;
-    json_object *avail_out_devices_o;
-    json_object *avail_frameworks_o;
-    int num_of_volume_types = 0;
-    int num_of_stream_types = 0;
-    const char *volume_type = NULL;
+    json_object *array_o;
+    json_object *array_item_o;
+    json_object *item_o;
+    json_object *sub_array_o;
+    int array_length = 0;
+    int sub_array_length = 0;
+    const char *type = NULL;
     const char *role = NULL;
     int i = 0, j = 0;
-    int num_of_avail_in_devices;
-    int num_of_avail_out_devices;
-    int num_of_avail_frameworks;
     json_object *out_device_o;
     json_object *in_device_o;
     json_object *framework_o;
-    json_object *volume_o;
-    json_object *stream_o;
-    json_object *volume_type_in_o;
-    json_object *volume_type_out_o;
     void *state = NULL;
 
     pa_assert(m);
@@ -1400,58 +1396,113 @@ static int init_stream_map(pa_stream_manager *m) {
         return -1;
     }
 
+    /* Latencies */
+    m->latency_infos = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
+    if (json_object_object_get_ex(o, STREAM_MAP_LATENCIES, &array_o) && json_object_is_type(array_o, json_type_array)) {
+        array_length = json_object_array_length(array_o);
+        for (i = 0; i < array_length; i++) {
+            if ((array_item_o = json_object_array_get_idx(array_o, i)) && json_object_is_type(array_item_o, json_type_object)) {
+                l = pa_xmalloc0(sizeof(latency_info));
+                pa_log_debug("latency found [%d]", i);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_TYPE, &item_o) && json_object_is_type(item_o, json_type_string)) {
+                    type = json_object_get_string(item_o);
+                    pa_log_debug(" - type : %s", type);
+                } else {
+                    pa_log_error("Get type failed");
+                    goto failed;
+                }
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_PERIOD_TIME_MS, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    l->periodt_ms = json_object_get_int(item_o);
+                    pa_log_debug(" - periodt-ms : %d", l->periodt_ms);
+                } else {
+                    pa_log_error("Get periodt-ms failed");
+                    goto failed;
+                }
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_TLENGTH_MS, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    l->tlength_ms = json_object_get_int(item_o);
+                    pa_log_debug(" - tlength-ms : %d", l->tlength_ms);
+                } else {
+                    pa_log_error("Get tlength-ms failed");
+                    goto failed;
+                }
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_MINREQ_MS, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    l->minreq_ms = json_object_get_int(item_o);
+                    pa_log_debug(" - minreq-ms : %d", l->minreq_ms);
+                } else {
+                    pa_log_error("Get minreq-ms failed");
+                    goto failed;
+                }
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_PREBUF_MS, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    l->prebuf_ms = json_object_get_int(item_o);
+                    pa_log_debug(" - prebuf-ms : %d", l->prebuf_ms);
+                } else {
+                    pa_log_error("Get prebuf-ms failed");
+                    goto failed;
+                }
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_LATENCY_MAXLENGTH, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    l->maxlength = json_object_get_int(item_o);
+                    pa_log_debug(" - maxlength : %d", l->maxlength);
+                } else {
+                    pa_log_error("Get maxlength failed");
+                    goto failed;
+                }
+                pa_hashmap_put(m->latency_infos, (void*)type, l);
+            }
+        }
+    }
+
     /* Volumes */
     m->volume_infos = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-    if (json_object_object_get_ex(o, STREAM_MAP_VOLUMES, &volume_array_o) && json_object_is_type(volume_array_o, json_type_array)) {
-        num_of_volume_types = json_object_array_length(volume_array_o);
-        for (i = 0; i < num_of_volume_types; i++) {
-            if ((volume_o = json_object_array_get_idx(volume_array_o, i)) && json_object_is_type(volume_o, json_type_object)) {
+    if (json_object_object_get_ex(o, STREAM_MAP_VOLUMES, &array_o) && json_object_is_type(array_o, json_type_array)) {
+        array_length = json_object_array_length(array_o);
+        for (i = 0; i < array_length; i++) {
+            if ((array_item_o = json_object_array_get_idx(array_o, i)) && json_object_is_type(array_item_o, json_type_object)) {
                 v = pa_xmalloc0(sizeof(volume_info));
                 pa_log_debug("volume found [%d]", i);
-                if (json_object_object_get_ex(volume_o, STREAM_MAP_VOLUME_TYPE, &volume_type_o) && json_object_is_type(volume_type_o, json_type_string)) {
-                    volume_type = json_object_get_string(volume_type_o);
-                    pa_log_debug(" - type : %s", volume_type);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_VOLUME_TYPE, &item_o) && json_object_is_type(item_o, json_type_string)) {
+                    type = json_object_get_string(item_o);
+                    pa_log_debug(" - type : %s", type);
                 } else {
                     pa_log_error("Get volume type failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(volume_o, STREAM_MAP_VOLUME_IS_FOR_HAL, &is_hal_volume_o) && json_object_is_type(is_hal_volume_o, json_type_int)) {
-                    v->is_hal_volume_type = (bool)json_object_get_int(is_hal_volume_o);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_VOLUME_IS_FOR_HAL, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    v->is_hal_volume_type = (bool)json_object_get_int(item_o);
                     pa_log_debug(" - is-hal-volume : %d", v->is_hal_volume_type);
                 } else {
                     pa_log_error("Get is-hal-volume failed");
                     goto failed;
                 }
-                pa_hashmap_put(m->volume_infos, (void*)volume_type, v);
+                pa_hashmap_put(m->volume_infos, (void*)type, v);
             }
         }
     }
 
     /* Streams */
     m->stream_infos = pa_hashmap_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-    if (json_object_object_get_ex(o, STREAM_MAP_STREAMS, &stream_array_o) && json_object_is_type(stream_array_o, json_type_array)) {
-        num_of_stream_types = json_object_array_length(stream_array_o);
-        for (i = 0; i < num_of_stream_types; i++) {
+    if (json_object_object_get_ex(o, STREAM_MAP_STREAMS, &array_o) && json_object_is_type(array_o, json_type_array)) {
+        array_length = json_object_array_length(array_o);
+        for (i = 0; i < array_length; i++) {
 
-            if ((stream_o = json_object_array_get_idx(stream_array_o, i)) && json_object_is_type(stream_o, json_type_object)) {
+            if ((array_item_o = json_object_array_get_idx(array_o, i)) && json_object_is_type(array_item_o, json_type_object)) {
                 s = pa_xmalloc0(sizeof(stream_info));
                 pa_log_debug("stream found [%d]", i);
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_ROLE, &role_o) && json_object_is_type(role_o, json_type_string)) {
-                    role = json_object_get_string(role_o);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_ROLE, &item_o) && json_object_is_type(item_o, json_type_string)) {
+                    role = json_object_get_string(item_o);
                     pa_log_debug(" - role : %s", role);
                 } else {
                     pa_log_error("Get stream role failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_PRIORITY, &priority_o) && json_object_is_type(priority_o, json_type_int)) {
-                    s->priority = json_object_get_int(priority_o);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_PRIORITY, &item_o) && json_object_is_type(item_o, json_type_int)) {
+                    s->priority = json_object_get_int(item_o);
                     pa_log_debug(" - priority : %d", s->priority);
                 } else {
                     pa_log_error("Get stream priority failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_ROUTE_TYPE, &route_type_o) && json_object_is_type(route_type_o, json_type_string)) {
-                    if (convert_route_type(&(s->route_type), json_object_get_string(route_type_o))) {
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_ROUTE_TYPE, &item_o) && json_object_is_type(item_o, json_type_string)) {
+                    if (convert_route_type(&(s->route_type), json_object_get_string(item_o))) {
                         pa_log_error("convert stream route-type failed");
                         goto failed;
                     }
@@ -1460,15 +1511,15 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream route-type failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_VOLUME_TYPES, &volume_types_o) && json_object_is_type(volume_types_o, json_type_object)) {
-                    if (json_object_object_get_ex(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN, &volume_type_in_o) && json_object_is_type(volume_type_in_o, json_type_string))
-                        s->volume_types[STREAM_DIRECTION_IN] = json_object_get_string(volume_type_in_o);
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_VOLUME_TYPES, &sub_array_o) && json_object_is_type(sub_array_o, json_type_object)) {
+                    if (json_object_object_get_ex(sub_array_o, STREAM_MAP_STREAM_VOLUME_TYPE_IN, &item_o) && json_object_is_type(item_o, json_type_string))
+                        s->volume_types[STREAM_DIRECTION_IN] = json_object_get_string(item_o);
                     else {
                         pa_log_error("Get stream volume-type-in failed");
                         goto failed;
                     }
-                    if (json_object_object_get_ex(volume_types_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT, &volume_type_out_o) && json_object_is_type(volume_type_out_o, json_type_string))
-                        s->volume_types[STREAM_DIRECTION_OUT] = json_object_get_string(volume_type_out_o);
+                    if (json_object_object_get_ex(sub_array_o, STREAM_MAP_STREAM_VOLUME_TYPE_OUT, &item_o) && json_object_is_type(item_o, json_type_string))
+                        s->volume_types[STREAM_DIRECTION_OUT] = json_object_get_string(item_o);
                     else {
                         pa_log_error("Get stream volume-type-out failed");
                         goto failed;
@@ -1478,13 +1529,13 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream volume-types failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_IN_DEVICES, &avail_in_devices_o) && json_object_is_type(avail_in_devices_o, json_type_array)) {
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_AVAIL_IN_DEVICES, &sub_array_o) && json_object_is_type(sub_array_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_in_devices = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-                    num_of_avail_in_devices = json_object_array_length(avail_in_devices_o);
+                    sub_array_length = json_object_array_length(sub_array_o);
                     pa_log_debug(" - avail-in-devices");
-                    for (j = 0; j < num_of_avail_in_devices; j++) {
-                        if ((in_device_o = json_object_array_get_idx(avail_in_devices_o, j)) && json_object_is_type(in_device_o, json_type_string)) {
+                    for (j = 0; j < sub_array_length; j++) {
+                        if ((in_device_o = json_object_array_get_idx(sub_array_o, j)) && json_object_is_type(in_device_o, json_type_string)) {
                             pa_idxset_put(s->idx_avail_in_devices, (void*)json_object_get_string(in_device_o), NULL);
                             pa_log_debug("      device[%d] : %s", j, json_object_get_string(in_device_o));
                            }
@@ -1493,13 +1544,13 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream avail-in-devices failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_OUT_DEVICES, &avail_out_devices_o) && json_object_is_type(avail_out_devices_o, json_type_array)) {
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_AVAIL_OUT_DEVICES, &sub_array_o) && json_object_is_type(sub_array_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_out_devices = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-                    num_of_avail_out_devices = json_object_array_length(avail_out_devices_o);
+                    sub_array_length = json_object_array_length(sub_array_o);
                     pa_log_debug(" - avail-out-devices");
-                    for (j = 0; j < num_of_avail_out_devices; j++) {
-                        if ((out_device_o = json_object_array_get_idx(avail_out_devices_o, j)) && json_object_is_type(out_device_o, json_type_string)) {
+                    for (j = 0; j < sub_array_length; j++) {
+                        if ((out_device_o = json_object_array_get_idx(sub_array_o, j)) && json_object_is_type(out_device_o, json_type_string)) {
                             pa_idxset_put(s->idx_avail_out_devices, (void*)json_object_get_string(out_device_o), NULL);
                             pa_log_debug("      device[%d] : %s", j, json_object_get_string(out_device_o));
                            }
@@ -1508,13 +1559,13 @@ static int init_stream_map(pa_stream_manager *m) {
                     pa_log_error("Get stream avail-out-devices failed");
                     goto failed;
                 }
-                if (json_object_object_get_ex(stream_o, STREAM_MAP_STREAM_AVAIL_FRAMEWORKS, &avail_frameworks_o) && json_object_is_type(avail_frameworks_o, json_type_array)) {
+                if (json_object_object_get_ex(array_item_o, STREAM_MAP_STREAM_AVAIL_FRAMEWORKS, &sub_array_o) && json_object_is_type(sub_array_o, json_type_array)) {
                     j = 0;
                     s->idx_avail_frameworks = pa_idxset_new(pa_idxset_string_hash_func, pa_idxset_string_compare_func);
-                    num_of_avail_frameworks = json_object_array_length(avail_frameworks_o);
+                    sub_array_length = json_object_array_length(sub_array_o);
                     pa_log_debug(" - avail-frameworks");
-                    for (j = 0; j < num_of_avail_frameworks; j++) {
-                        if ((framework_o = json_object_array_get_idx(avail_frameworks_o, j)) && json_object_is_type(framework_o, json_type_string)) {
+                    for (j = 0; j < sub_array_length; j++) {
+                        if ((framework_o = json_object_array_get_idx(sub_array_o, j)) && json_object_is_type(framework_o, json_type_string)) {
                             pa_idxset_put(s->idx_avail_frameworks, (void*)json_object_get_string(framework_o), NULL);
                             pa_log_debug("      framework[%d] : %s", j, json_object_get_string(framework_o));
                            }
@@ -1554,12 +1605,19 @@ failed:
         }
         pa_hashmap_free(m->volume_infos);
     }
+    if (m->latency_infos) {
+        PA_HASHMAP_FOREACH(l, m->latency_infos, state) {
+            pa_xfree(l);
+        }
+        pa_hashmap_free(m->latency_infos);
+    }
     return -1;
 }
 
 static void deinit_stream_map(pa_stream_manager *m) {
     stream_info *s = NULL;
     volume_info *v = NULL;
+    latency_info *l = NULL;
     void *state = NULL;
 
     pa_assert(m);
@@ -1581,6 +1639,12 @@ static void deinit_stream_map(pa_stream_manager *m) {
             pa_xfree(v);
         }
         pa_hashmap_free(m->volume_infos);
+    }
+    if (m->latency_infos) {
+        PA_HASHMAP_FOREACH(l, m->latency_infos, state) {
+            pa_xfree(l);
+        }
+        pa_hashmap_free(m->latency_infos);
     }
 
     return;
@@ -1802,7 +1866,7 @@ static bool update_stream_parent_info(pa_stream_manager *m, process_command_type
 }
 
 static bool update_the_highest_priority_stream(pa_stream_manager *m, process_command_type_t command, void *mine,
-                                                    stream_type_t type, const char *role, bool is_new_data, bool *need_to_update) {
+                                               stream_type_t type, const char *role, bool is_new_data, bool *need_to_update) {
     uint32_t idx = 0;
     size_t size = 0;
     const int32_t *priority = NULL;
@@ -1997,6 +2061,75 @@ static bool update_the_highest_priority_stream(pa_stream_manager *m, process_com
         }
     }
     return true;
+}
+
+/* Update buffer attributes to new stream */
+static void update_buffer_attribute(pa_stream_manager *m, void *new_data, stream_type_t stream_type, bool is_new_data) {
+    pa_sample_spec *sample_spec;
+    const char *latency;
+    latency_info *li;
+    int32_t periodt_ms = -1;
+    int32_t maxlength = -1;
+    /* playback only */
+    int32_t tlength = -1;
+    int32_t minreq = -1;
+    int32_t prebuf = -1;
+    int32_t tlength_ms = 0;
+    int32_t minreq_ms = 0;
+    int32_t prebuf_ms = -1;
+    /* recording  only */
+    int32_t fragsize = -1;
+
+    pa_assert(m);
+    pa_assert(new_data);
+
+    if (!is_new_data) {
+        pa_log_warn("updating buffer attribute is only for new data, skip it");
+        return;
+    }
+
+    if ((latency = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(new_data, stream_type), PA_PROP_MEDIA_TIZEN_AUDIO_LATENCY)))
+        pa_log_info("audio_latency : %s", latency);
+    else {
+        pa_log_warn("failed to get audio_latency");
+        return;
+    }
+
+    if (!(li = pa_hashmap_get(m->latency_infos, latency))) {
+        pa_log_warn("not support this latency type[%s]", latency);
+        return;
+    }
+
+    periodt_ms = li->periodt_ms;
+    tlength_ms = li->tlength_ms;
+    minreq_ms = li->minreq_ms;
+    prebuf_ms = li->prebuf_ms;
+    maxlength = li->maxlength;
+
+    sample_spec = GET_STREAM_NEW_SAMPLE_SPEC_PTR(new_data, stream_type);
+    pa_log_info("*** sample_spec: format(%d), rate(%u), channels(%u)",
+                 sample_spec->format, sample_spec->rate, sample_spec->channels);
+
+    if (stream_type ==  STREAM_SINK_INPUT) {
+        if (minreq_ms > 0)
+            minreq = pa_usec_to_bytes(minreq_ms * 1000, sample_spec);
+        if (tlength_ms > 0)
+            tlength = pa_usec_to_bytes(tlength_ms * 1000, sample_spec);
+        if (prebuf_ms > 0)
+            prebuf = pa_usec_to_bytes(prebuf_ms * 1000, sample_spec);
+    } else if (stream_type == STREAM_SOURCE_OUTPUT)
+        fragsize = ((sample_spec->rate * periodt_ms) / 1000 ) * pa_sample_size(sample_spec);
+
+    pa_log_info("*** periodt_ms:%d, minreq:%d, tlength:%d, prebuf:%d, maxlength:%d, fragsize:%d",
+                periodt_ms, minreq, tlength, prebuf, maxlength, fragsize);
+
+    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "tlength",   "%d", tlength);
+    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "minreq",    "%d", minreq);
+    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "fragsize",  "%d", fragsize);
+    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "maxlength", "%d", maxlength);
+    pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "prebuf",    "%d", prebuf);
+
+    return;
 }
 
 static void fill_device_info_to_hook_data(pa_stream_manager *m, void *hook_data, notify_command_type_t command, stream_type_t type, void *stream, bool is_new_data) {
@@ -2547,48 +2680,13 @@ static process_stream_result_t process_stream(pa_stream_manager *m, void *stream
                 //return PROCESS_STREAM_RESULT_STOP;
             }
         }
+    } else if (command == PROCESS_COMMAND_UPDATE_BUFFER_ATTR) {
+        update_buffer_attribute(m, stream, type, is_new_data);
     }
 
 FAILURE:
     pa_log_info("<<< process_stream(%s): result(%d), stream(%p)", process_command_type_str[command], result, stream);
     return result;
-}
-
-/* Set buffer attributes from HAL */
-static void set_buffer_attribute(pa_stream_manager *m, void *new_data, stream_type_t stream_type) {
-    int32_t maxlength = -1;
-    int32_t tlength = -1;
-    int32_t prebuf = -1;
-    int32_t minreq = -1;
-    int32_t fragsize = -1;
-    hal_stream_info info;
-
-    pa_assert(m);
-    pa_assert(new_data);
-
-    if (m->hal == NULL)
-        return;
-
-    if ((info.latency = pa_proplist_gets(GET_STREAM_NEW_PROPLIST(new_data, stream_type), PA_PROP_MEDIA_TIZEN_AUDIO_LATENCY)))
-        pa_log_info("audio_latency : %s", info.latency);
-    else {
-        pa_log_warn("failed to get audio_latency");
-        return;
-    }
-    info.direction = (io_direction_t)!stream_type;
-    info.sample_spec = GET_STREAM_NEW_SAMPLE_SPEC_PTR(new_data, stream_type);
-
-    if (!pa_hal_interface_get_buffer_attribute(m->hal, &info, (uint32_t*)&maxlength, (uint32_t*)&tlength,
-                                             (uint32_t*)&prebuf, (uint32_t*)&minreq, (uint32_t*)&fragsize)) {
-        pa_log_info(" - maxlength:%d, tlength:%d, prebuf:%d, minreq:%d, fragsize:%d", maxlength, tlength, prebuf, minreq, fragsize);
-        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "maxlength", "%d", maxlength);
-        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "tlength",   "%d", tlength);
-        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "prebuf",    "%d", prebuf);
-        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "minreq",    "%d", minreq);
-        pa_proplist_setf(GET_STREAM_NEW_PROPLIST(new_data, stream_type), "fragsize",  "%d", fragsize);
-    }
-
-    return;
 }
 
 /* Remove the sink-input from muted streams */
@@ -2614,7 +2712,7 @@ static pa_hook_result_t sink_input_new_cb(pa_core *core, pa_sink_input_new_data 
     pa_log_info("start sink_input_new_cb");
 
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_PREPARE, true);
-    set_buffer_attribute(m, new_data, STREAM_SINK_INPUT);
+    process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_UPDATE_BUFFER_ATTR, true);
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_UPDATE_VOLUME, true);
     process_stream(m, new_data, STREAM_SINK_INPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, true);
 
@@ -2708,7 +2806,7 @@ static pa_hook_result_t source_output_new_cb(pa_core *core, pa_source_output_new
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_PREPARE, true);
     if (check_restrictions(m, new_data, STREAM_SOURCE_OUTPUT))
         return PA_HOOK_CANCEL;
-    set_buffer_attribute(m, new_data, STREAM_SOURCE_OUTPUT);
+    process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_UPDATE_BUFFER_ATTR, true);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_UPDATE_VOLUME, true);
     process_stream(m, new_data, STREAM_SOURCE_OUTPUT, PROCESS_COMMAND_CHANGE_ROUTE_BY_STREAM_STARTED, true);
 

@@ -1,7 +1,7 @@
 /***
   This file is part of PulseAudio.
 
-  Copyright 2015 Sangchul Lee <sc11.lee@samsung.com>
+  Copyright 2015-2016 Sangchul Lee <sc11.lee@samsung.com>
 
   PulseAudio is free software; you can redistribute it and/or modify
   it under the terms of the GNU Lesser General Public License as published

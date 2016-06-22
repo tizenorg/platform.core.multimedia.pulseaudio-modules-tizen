@@ -909,9 +909,9 @@ static pa_hook_result_t route_change_hook_cb(pa_core *c, pa_stream_manager_hook_
                         }
                         /* Check for in/out devices in case of loopback */
                         if (pa_streq(data->stream_role, STREAM_ROLE_LOOPBACK)) {
-                            if (dm_device_direction & DM_DEVICE_DIRECTION_OUT)
+                            if ((data->stream_type == STREAM_SINK_INPUT) && (dm_device_direction & DM_DEVICE_DIRECTION_OUT))
                                 u->loopback_args.sink = pa_device_manager_get_sink(device, DEVICE_ROLE_NORMAL);
-                            else if (dm_device_direction & DM_DEVICE_DIRECTION_IN)
+                            else if ((data->stream_type == STREAM_SOURCE_OUTPUT) && (dm_device_direction & DM_DEVICE_DIRECTION_IN))
                                 u->loopback_args.source = pa_device_manager_get_source(device, DEVICE_ROLE_NORMAL);
                         }
 

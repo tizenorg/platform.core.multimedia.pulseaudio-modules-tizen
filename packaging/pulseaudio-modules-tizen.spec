@@ -1,6 +1,6 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Pulseaudio modules for Tizen
-Version:          5.0.59
+Version:          5.0.60
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -12,6 +12,7 @@ BuildRequires:    pkgconfig(dbus-1)
 BuildRequires:    pkgconfig(iniparser)
 BuildRequires:    pkgconfig(json-c)
 BuildRequires:    pkgconfig(vconf)
+BuildRequires:    mm-hal-interface
 BuildRequires:    pkgconfig(libpulse)
 BuildRequires:    pkgconfig(pulsecore)
 BuildRequires:    pulseaudio

@@ -24,7 +24,7 @@
 #endif
 
 #include "hal-interface.h"
-#include "tizen-audio.h"
+#include <tizen-audio.h>
 #include <pulsecore/shared.h>
 
 #define SHARED_HAL_INTF "tizen-hal-interface"

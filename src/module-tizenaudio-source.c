@@ -468,10 +468,10 @@ int pa__init(pa_module*m) {
     u->source->update_requested_latency = source_update_requested_latency_cb;
     u->source->userdata = u;
 
+    unsuspend(u);
+
     pa_source_set_asyncmsgq(u->source, u->thread_mq.inq);
     pa_source_set_rtpoll(u->source, u->rtpoll);
-
-    unsuspend(u);
 
     u->block_usec = BLOCK_USEC;
     u->latency_time = u->block_usec;

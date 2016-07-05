@@ -538,5 +538,10 @@ void pa__done(pa_module*m) {
     if (u->rtpoll)
         pa_rtpoll_free(u->rtpoll);
 
+    if (u->pcm_handle) {
+        pa_hal_interface_pcm_stop(u->hal_interface, u->pcm_handle);
+        pa_hal_interface_pcm_close(u->hal_interface, u->pcm_handle);
+    }
+
     pa_xfree(u);
 }

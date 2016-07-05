@@ -468,10 +468,18 @@ int pa__init(pa_module*m) {
     u->source->update_requested_latency = source_update_requested_latency_cb;
     u->source->userdata = u;
 
+    if (pa_hal_interface_pcm_open(u->hal_interface,
+              (void **)&u->pcm_handle,
+              DIRECTION_IN,
+              &u->source->sample_spec,
+              u->frag_size / pa_frame_size(&u->source->sample_spec),
+              u->nfrags)) {
+        pa_log_error("Error opening PCM device");
+        goto fail;
+    }
+
     pa_source_set_asyncmsgq(u->source, u->thread_mq.inq);
     pa_source_set_rtpoll(u->source, u->rtpoll);
-
-    unsuspend(u);
 
     u->block_usec = BLOCK_USEC;
     u->latency_time = u->block_usec;

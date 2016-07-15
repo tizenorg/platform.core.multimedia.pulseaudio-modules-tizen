@@ -378,6 +378,18 @@ fi
 AM_CONDITIONAL(USE_DLOG, test "x$USE_DLOG" = "xyes")
 dnl end --------------------------------------------------------------------
 
+dnl use hal tc ------------------------------------------------------------
+AC_ARG_ENABLE(haltc, AC_HELP_STRING([--enable-haltc], [using haltc]),
+[
+ case "${enableval}" in
+	 yes) ENABLE_HALTC=yes ;;
+	 no)  ENABLE_HALTC=no ;;
+	 *)   AC_MSG_ERROR(bad value ${enableval} for --enable-haltc) ;;
+ esac
+ ],[USE_HALTC=no])
+AM_CONDITIONAL(ENABLE_HALTC, test "x$ENABLE_HALTC" = "xyes")
+dnl end --------------------------------------------------------------------
+
 #### D-Bus support (optional) ####
 
 AC_ARG_ENABLE([dbus],

@@ -1,6 +1,6 @@
 Name:             pulseaudio-modules-tizen
 Summary:          Pulseaudio modules for Tizen
-Version:          5.0.62
+Version:          5.0.63
 Release:          0
 Group:            Multimedia/Audio
 License:          LGPL-2.1+
@@ -38,6 +38,7 @@ export LD_AS_NEEDED=0
 %if %{with pulseaudio_dlog}
         --enable-dlog \
 %endif
+#        --enable-haltc
 
 %__make %{?_smp_mflags} V=1
 

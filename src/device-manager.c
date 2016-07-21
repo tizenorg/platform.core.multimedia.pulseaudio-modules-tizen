@@ -66,7 +66,6 @@
 #define DEVICE_TYPE_PROP_DEVICE_TYPE        "device-type"
 #define DEVICE_TYPE_PROP_BUILTIN            "builtin"
 #define DEVICE_TYPE_PROP_DIRECTION          "direction"
-#define DEVICE_TYPE_PROP_AVAIL_CONDITION    "avail-conditioin"
 #define DEVICE_TYPE_PROP_PLAYBACK_DEVICES   "playback-devices"
 #define DEVICE_TYPE_PROP_CAPTURE_DEVICES    "capture-devices"
 #define DEVICE_TYPE_PROP_DEVICE_STRING      "device-string"
@@ -79,9 +78,6 @@
 #define DEVICE_DIRECTION_STR_OUT            "out"
 #define DEVICE_DIRECTION_STR_IN             "in"
 #define DEVICE_DIRECTION_STR_BOTH           "both"
-
-#define DEVICE_AVAIL_CONDITION_STR_PULSE    "pulse"
-#define DEVICE_AVAIL_CONDITION_STR_DBUS     "dbus"
 
 /* Properties of sink/sources */
 #define DEVICE_API_BLUEZ                    "bluez"
@@ -423,19 +419,6 @@ struct device_file_info {
 struct device_type_info {
     const char *type;
     const char *profile;
-    bool builtin;
-    /*
-        Possible directions of this device.
-        ex) speaker is always out, but earjack can be both or out.
-    */
-    dm_device_direction_t direction[DEVICE_DIRECTION_MAX];
-    /*
-        Conditions for make device available.
-        ex) Speaker be available, only if proper pcm-device exists.
-        but audio-jack is available, if pcm-device exists and got detected status.
-    */
-    char avail_condition[DEVICE_AVAIL_COND_NUM_MAX][DEVICE_AVAIL_COND_STR_MAX];
-    int num;
     /*
         For save supported roles and related device-file.
         { key:role -> value:device_string ]
@@ -515,6 +498,19 @@ enum signal_index {
 
 static uint32_t _new_event_id() {
     return event_id_max_g++;
+}
+
+static bool device_type_is_builtin(const char *device_type) {
+    if (!device_type)
+        return false;
+    else if (pa_streq(device_type, DEVICE_TYPE_SPEAKER))
+        return true;
+    else if (pa_streq(device_type, DEVICE_TYPE_RECEIVER))
+        return true;
+    else if (pa_streq(device_type, DEVICE_TYPE_MIC))
+        return true;
+    else
+        return false;
 }
 
 static bool device_type_is_valid(const char *device_type) {
@@ -1729,49 +1725,45 @@ static void _device_profile_set_state(dm_device_profile *profile_item,  dm_devic
 static int device_type_get_direction(pa_device_manager *dm, const char *device_type, const char *device_profile, const char *identifier) {
     struct device_type_info *type_info = NULL;
     struct device_status_info *status_info;
-    dm_device_direction_t direction = 0, d_num = 0, d_idx = 0, correct_d_idx = 0;
 
     if (!dm || !device_type) {
         pa_log_error("Invalid Parameter");
         return -1;
     }
 
-    if (!(type_info = _device_manager_get_type_info(dm->type_infos, device_type, device_profile))) {
-        pa_log_error("No type map for %s", device_type);
+    if (pa_streq(device_type, DEVICE_TYPE_SPEAKER)) {
+        return DM_DEVICE_DIRECTION_OUT;
+    } else if (pa_streq(device_type, DEVICE_TYPE_RECEIVER)) {
+        return DM_DEVICE_DIRECTION_OUT;
+    } else if (pa_streq(device_type, DEVICE_TYPE_MIC)) {
+        return DM_DEVICE_DIRECTION_IN;
+    } else if (pa_streq(device_type, DEVICE_TYPE_BT) && pa_streq(device_profile, DEVICE_PROFILE_BT_A2DP)) {
         return -1;
-    }
-
-    if (pa_streq(type_info->type, DEVICE_TYPE_FORWARDING))
+    } else if (pa_streq(device_type, DEVICE_TYPE_BT) && pa_streq(device_profile, DEVICE_PROFILE_BT_SCO)) {
         return DM_DEVICE_DIRECTION_BOTH;
-
-    for (d_idx = 0; d_idx < DEVICE_DIRECTION_MAX; d_idx++) {
-        if (type_info->direction[d_idx] != DM_DEVICE_DIRECTION_NONE) {
-            correct_d_idx = d_idx;
-            d_num++;
+    } else if (pa_streq(device_type, DEVICE_TYPE_HDMI)) {
+        return DM_DEVICE_DIRECTION_OUT;
+    } else if (pa_streq(device_type, DEVICE_TYPE_USB_AUDIO)) {
+        return -1;
+    } else if (pa_streq(device_type, DEVICE_TYPE_FORWARDING)) {
+        return DM_DEVICE_DIRECTION_BOTH;
+    } else if (pa_streq(device_type, DEVICE_TYPE_AUDIO_JACK)) {
+        if (!(type_info = _device_manager_get_type_info(dm->type_infos, device_type, device_profile))) {
+            pa_log_error("No type map for %s", device_type);
+            return -1;
         }
-    }
-
-    if (d_num == 1) {
-        direction = type_info->direction[correct_d_idx];
-    } else {
-        /* Actually, only 'audio-jack' should come here */
-        if (pa_streq(device_type, DEVICE_TYPE_AUDIO_JACK)) {
-            status_info = _device_manager_get_status_info(dm->device_status, type_info->type, type_info->profile, identifier);
-            if (status_info->detected_type == DEVICE_DETECTED_AUDIO_JACK_BOTH_DIREC) {
-                direction = DM_DEVICE_DIRECTION_BOTH;
-            } else if (status_info->detected_type == DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC) {
-                direction = DM_DEVICE_DIRECTION_OUT;
-            } else {
-                pa_log_debug("Cannot get audio jack device direction");
-                return -1;
-            }
+        status_info = _device_manager_get_status_info(dm->device_status, type_info->type, type_info->profile, identifier);
+        if (status_info->detected_type == DEVICE_DETECTED_AUDIO_JACK_BOTH_DIREC) {
+            return DM_DEVICE_DIRECTION_BOTH;
+        } else if (status_info->detected_type == DEVICE_DETECTED_AUDIO_JACK_OUT_DIREC) {
+            return  DM_DEVICE_DIRECTION_OUT;
         } else {
-            pa_log_error("Weird case, '%s' is not expected to have multiple direction", device_type);
+            pa_log_debug("Cannot get audio jack device direction");
             return -1;
         }
     }
 
-    return direction;
+    return -1;
 }
 
 static int pulse_device_get_device_type(void *pulse_device, pa_device_type_t pdt, dm_device_class_t device_class, const char **device_type, const char **device_profile, const char **device_name) {
@@ -2212,8 +2204,6 @@ static dm_device* handle_device_type_available(struct device_type_info *type_inf
 
     pa_log_debug("handle_device_type_available, type:%s, profile:%s, name:%s", type_info->type, type_info->profile, name);
 
-
-
     /* Directions of some types are not statically defined, ex) earjack */
     if ((direction = device_type_get_direction(dm, type_info->type, type_info->profile, NULL)) < 0) {
         pa_log_error("Failed to get direction of %s.%s", type_info->type, type_info->profile);
@@ -2325,21 +2315,8 @@ static void handle_predefined_device_loaded(void *pulse_device, pa_device_type_t
     }
 }
 
-static bool _device_type_direction_available(struct device_type_info *type_info, dm_device_direction_t direction) {
-    int direc_idx;
-
-    for (direc_idx = 0; direc_idx < DEVICE_DIRECTION_MAX; direc_idx++) {
-        if (type_info->direction[direc_idx] == direction) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 static void handle_sink_unloaded(pa_sink *sink, pa_device_manager *dm) {
     dm_device_profile *profile_item = NULL;
-    struct device_type_info *type_info;
     dm_device *device_item;
     uint32_t device_idx = 0, profile_idx;
     pa_sink *sink_iter = NULL;
@@ -2380,18 +2357,8 @@ static void handle_sink_unloaded(pa_sink *sink, pa_device_manager *dm) {
                     pa_hashmap_free(profile_item->playback_devices);
                     profile_item->playback_devices = NULL;
 
-                    if (profile_item->direction == DM_DEVICE_DIRECTION_BOTH) {
-                        type_info = _device_manager_get_type_info(dm->type_infos, profile_item->device_item->type, profile_item->profile);
-                        if (_device_type_direction_available(type_info, DM_DEVICE_DIRECTION_IN)) {
-                            profile_item->direction = DM_DEVICE_DIRECTION_IN;
-                        } else {
-                            if (!destroy_device_profile(profile_item, dm))
-                                break;
-                        }
-                    } else {
-                        if (!destroy_device_profile(profile_item, dm))
-                            break;
-                    }
+                    if (!destroy_device_profile(profile_item, dm))
+                        break;
                 } else {
                     _device_profile_update_direction(profile_item);
                 }
@@ -2402,7 +2369,6 @@ static void handle_sink_unloaded(pa_sink *sink, pa_device_manager *dm) {
 
 static void handle_source_unloaded(pa_source *source, pa_device_manager *dm) {
     dm_device_profile *profile_item = NULL;
-    struct device_type_info *type_info;
     dm_device *device_item;
     uint32_t device_idx = 0, profile_idx;
     pa_source *source_iter = NULL;
@@ -2442,22 +2408,8 @@ static void handle_source_unloaded(pa_source *source, pa_device_manager *dm) {
                 }
 
                 if (!pa_hashmap_size(profile_item->capture_devices)) {
-                    pa_hashmap_free(profile_item->capture_devices);
-                    profile_item->capture_devices = NULL;
-
-                    if (profile_item->direction == DM_DEVICE_DIRECTION_BOTH) {
-                        type_info = _device_manager_get_type_info(dm->type_infos, profile_item->device_item->type, profile_item->profile);
-                        if (_device_type_direction_available(type_info, DM_DEVICE_DIRECTION_OUT)) {
-                            profile_item->direction = DM_DEVICE_DIRECTION_OUT;
-                        } else {
-                            if (!destroy_device_profile(profile_item, dm))
-                                break;
-                        }
-                    } else {
-                        if (!destroy_device_profile(profile_item, dm))
-                            break;
-                    }
-
+                    if (!destroy_device_profile(profile_item, dm))
+                        break;
                 } else {
                     _device_profile_update_direction(profile_item);
                 }
@@ -2752,8 +2704,6 @@ static int load_builtin_devices(pa_device_manager *dm) {
         }
     }
 
-
-
     if (dm->file_map->capture) {
         PA_IDXSET_FOREACH(file_info, dm->file_map->capture, file_idx) {
             pa_log_debug("---------------- load source for '%s' ------------------", file_info->device_string);
@@ -3022,8 +2972,6 @@ static pa_idxset* parse_device_type_infos() {
 
             if ((device_o = json_object_array_get_idx(device_array_o, device_type_idx)) && json_object_is_type(device_o, json_type_object)) {
                 json_object *device_prop_o;
-                json_object *array_item_o;
-                int array_len, array_idx;
                 const char *device_type = NULL, *device_profile = NULL;
                 type_info = pa_xmalloc0(sizeof(struct device_type_info));
 
@@ -3041,50 +2989,6 @@ static pa_idxset* parse_device_type_infos() {
                     type_info->profile = device_profile;
                 } else {
                     pa_log_debug("no device-profile");
-                }
-
-
-                if (json_object_object_get_ex(device_o, DEVICE_TYPE_PROP_BUILTIN, &device_prop_o) && json_object_is_type(device_prop_o, json_type_boolean)) {
-                    builtin = json_object_get_boolean(device_prop_o);
-                    pa_log_debug("[DEBUG_PARSE] builtin: %d", builtin);
-                    type_info->builtin = builtin;
-                } else {
-                    pa_log_error("Get device prop '%s' failed", DEVICE_TYPE_PROP_BUILTIN);
-                }
-
-                if (json_object_object_get_ex(device_o, DEVICE_TYPE_PROP_DIRECTION, &device_prop_o) && json_object_is_type(device_prop_o, json_type_array)) {
-                    const char *direction;
-                    array_len = json_object_array_length(device_prop_o);
-                    if ((array_len = json_object_array_length(device_prop_o)) > DEVICE_DIRECTION_MAX) {
-                        pa_log_error("Invalid case, The number of direction is too big (%d)", array_len);
-                        goto failed;
-                    }
-                    for (array_idx = 0; array_idx < array_len; array_idx++) {
-                        if ((array_item_o = json_object_array_get_idx(device_prop_o, array_idx)) && json_object_is_type(array_item_o, json_type_string)) {
-                            direction = json_object_get_string(array_item_o);
-                            pa_log_debug("[DEBUG_PARSE] direction : %s", direction);
-                            type_info->direction[array_idx] = device_direction_to_int(direction);
-                        }
-                    }
-                } else {
-                    pa_log_error("Get device prop '%s' failed", DEVICE_TYPE_PROP_DIRECTION);
-                }
-
-                if (json_object_object_get_ex(device_o, "avail-condition", &device_prop_o) && json_object_is_type(device_prop_o, json_type_array)) {
-                    const char *avail_cond;
-                    if ((array_len = json_object_array_length(device_prop_o)) > DEVICE_AVAIL_COND_NUM_MAX) {
-                        pa_log_error("Invalid case, The number of avail-condition is too big (%d)", array_len);
-                        goto failed;
-                    }
-                    for (array_idx = 0; array_idx < array_len; array_idx++) {
-                        if ((array_item_o = json_object_array_get_idx(device_prop_o, array_idx)) && json_object_is_type(array_item_o, json_type_string)) {
-                            avail_cond = json_object_get_string(array_item_o);
-                            pa_log_debug("[DEBUG_PARSE] avail-condition : %s", avail_cond);
-                            strncpy(type_info->avail_condition[array_idx], avail_cond, DEVICE_AVAIL_COND_STR_MAX);
-                        }
-                    }
-                } else {
-                    pa_log_error("Get device prop 'avail-condition' failed");
                 }
 
                 if (json_object_object_get_ex(device_o, "playback-devices", &device_prop_o) && json_object_is_type(device_prop_o, json_type_object)) {
@@ -3291,6 +3195,9 @@ static pa_idxset* device_type_status_init(pa_idxset *type_infos) {
                 pa_log_warn("Unknown earjack status : %d", earjack_status);
             }
         } else if (!compare_device_type(status_info->type, status_info->profile, DEVICE_TYPE_BT, DEVICE_PROFILE_BT_SCO)) {
+                status_info->detected = DEVICE_NOT_DETECTED;
+        } else if (!compare_device_type(status_info->type, status_info->profile, DEVICE_TYPE_HDMI, NULL)) {
+                status_info->detected = DEVICE_NOT_DETECTED;
         } else if (!compare_device_type(status_info->type, status_info->profile, DEVICE_TYPE_FORWARDING, NULL)) {
             int miracast_wfd_status = 0;
             if (vconf_get_bool(VCONFKEY_MIRACAST_WFD_SOURCE_STATUS, &miracast_wfd_status) < 0) {
@@ -3306,17 +3213,7 @@ static pa_idxset* device_type_status_init(pa_idxset *type_infos) {
                 pa_log_warn("Unknown mirroring status : %d", miracast_wfd_status);
             }
         } else {
-            for (avail_cond_idx = 0, avail_cond_num = 0; avail_cond_idx < DEVICE_AVAIL_COND_NUM_MAX; avail_cond_idx++) {
-                if (pa_streq(type_info->avail_condition[avail_cond_idx], "")) {
-                    avail_cond_num++;
-                }
-            }
-            if (avail_cond_num == 1 && pa_streq(type_info->avail_condition[correct_avail_cond], DEVICE_AVAIL_CONDITION_STR_PULSE)) {
-                /* device types which don't need to be detected from other-side, let's just set 'detected'*/
-                status_info->detected = DEVICE_DETECTED;
-            } else {
-                status_info->detected = DEVICE_NOT_DETECTED;
-            }
+            status_info->detected = DEVICE_DETECTED;
         }
 
         pa_log_debug("Set %-17s %s detected", type_info->type, (status_info->detected == DEVICE_DETECTED) ? "" : "not");
@@ -3607,14 +3504,9 @@ static bool device_item_match_for_mask(dm_device *device_item, int device_flags,
         }
     }
     if (need_to_check_for_type) {
-        struct device_type_info *type_info;
-        if (!(type_info = _device_manager_get_type_info(dm->type_infos,  device_item->type,  profile_item->profile))) {
-            pa_log_error("No type_info for %s.%s", device_item->type, profile_item->profile);
-            return false;
-        }
-        if (type_info->builtin && (device_flags & DEVICE_TYPE_INTERNAL_FLAG))
+        if (device_type_is_builtin(device_item->type) && (device_flags & DEVICE_TYPE_INTERNAL_FLAG))
             return true;
-        else if (!type_info->builtin && (device_flags & DEVICE_TYPE_EXTERNAL_FLAG))
+        else if (!device_type_is_builtin(device_item->type) && (device_flags & DEVICE_TYPE_EXTERNAL_FLAG))
             return true;
     }
 

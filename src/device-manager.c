@@ -1795,7 +1795,7 @@ static int pulse_device_get_device_type(void *pulse_device, pa_device_type_t pdt
         if (pulse_device_is_usb(prop)) {
             *device_type = DEVICE_TYPE_USB_AUDIO;
             *device_profile = NULL;
-            *device_name = pa_proplist_gets(prop, PA_PROP_DEVICE_SERIAL);
+            *device_name = pa_proplist_gets(prop, PA_PROP_UDEV_ID);
         } else {
             pa_log_warn("This is alsa device, but not usb. really unknown device");
             return -1;
